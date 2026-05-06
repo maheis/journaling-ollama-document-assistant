@@ -84,7 +84,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--log-file", default="organize_log.jsonl", help="Path to JSONL log")
     parser.add_argument("--ocr-max-pages", type=int, default=3, help="Max pages to OCR when PDF has little text")
     parser.add_argument("--process-nice", type=int, default=5, help="Increase niceness to lower CPU priority")
-    parser.add_argument("--max-cpu-threads", type=int, default=2, help="Limit CPU threads for OCR/BLAS libs (0 disables)")
+    parser.add_argument("--max-cpu-threads", type=int, default=4, help="Limit CPU threads for OCR/BLAS libs (0 disables)")
     parser.add_argument("--ollama-num-thread", type=int, default=2, help="Limit Ollama model threads (0 uses model default)")
     parser.add_argument("--sleep-between-files", type=float, default=0.4, help="Pause between files in seconds")
 
