@@ -1,0 +1,6 @@
+requests
+pypdf
+pdf2image
+pytesseract
+Pillow
+python-magic
