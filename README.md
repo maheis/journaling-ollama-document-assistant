@@ -32,7 +32,7 @@ Ja, das Setup ist fuer den Anwendungsfall geeignet.
 
 Fuer die Debian-VM:
 - RAM: 16 GB
-- vCPU: 4 (Start), bei Bedarf auf 6 erhoehen
+- vCPU: 8 (aktuell), bei Bedarf auf 4-6 reduzieren wenn andere VMs Lastprobleme haben
 - CPU Type: host
 - Ballooning:
   - stabilster Betrieb: aus
@@ -43,6 +43,7 @@ Fuer die Debian-VM:
 Warum:
 - Genug Reserve fuer OCR + LLM im selben Lauf
 - Bei 4 GB + 4 GB + 16 GB bleiben auf dem Host ca. 8 GB fuer Proxmox und Cache
+- 8 vCPU erhoehen Durchsatz, aber koennen ohne Drosselung den Host stark auslasten
 
 ## Modell-Empfehlung (Testreihenfolge)
 
@@ -245,8 +246,8 @@ Wenn es weiter zu Timeouts kommt:
 Das Script unterstuetzt eingebaute CPU-Drosselung:
 
 - `--process-nice 5`: Prozess laeuft mit niedrigerer Prioritaet
-- `--max-cpu-threads 2`: begrenzt Threads fuer OCR/BLAS-lastige Teile
-- `--ollama-num-thread 2`: begrenzt Threads fuer den Modellaufruf
+- `--max-cpu-threads 4`: begrenzt Threads fuer OCR/BLAS-lastige Teile
+- `--ollama-num-thread 4`: begrenzt Threads fuer den Modellaufruf
 - `--sleep-between-files 0.4`: kurze Pause zwischen Dokumenten
 
 Empfehlung fuer deinen Host:
@@ -271,8 +272,25 @@ Wenn der Host trotzdem noch zu stark ausgelastet ist:
 2. `--ollama-num-thread 1`
 3. auf `qwen2.5:3b-instruct` bleiben
 
+### Standard-Defaults (ohne Zusatzflags)
+
+Aktuelle Defaults sind CPU-sicher gesetzt:
+
+- `--ollama-timeout 420`
+- `--ollama-retries 2`
+- `--max-text-chars 6000`
+- `--max-cpu-threads 4`
+- `--ollama-num-thread 4`
+
+Damit sollte auch dieser einfache Aufruf robuster laufen:
+
+```bash
+python3 organize.py --input ./inbox --dry-run --model qwen2.5:3b-instruct
+```
+
 ## Naechste Schritte
 
-1. Debian-VM auf 16 GB RAM setzen und mit 4 vCPU starten.
+1. Ist umgesetzt: Debian-VM auf 16 GB RAM und 8 vCPU.
 2. qwen2.5:3b und qwen2.5:7b gegeneinander testen.
-3. Danach organize.py fertigstellen (OCR + LLM + Dry-Run/Apply + Logging).
+3. CPU-Last mit `--max-cpu-threads 4 --ollama-num-thread 4` einpegeln.
+4. Wenn OPNsense/Home Assistant Lastspitzen sehen: auf `--max-cpu-threads 2 --ollama-num-thread 2` reduzieren.
