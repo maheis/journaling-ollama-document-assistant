@@ -90,6 +90,16 @@
         "satzung",
         "beitritt"
     ],
+    "AUTO": [
+        "fahrzeug",
+        "kfz",
+        "zulassung",
+        "kennzeichen",
+        "hu",
+        "tuev",
+        "werkstatt",
+        "inspektion"
+    ],
     "URLAUB": [
         "urlaub",
         "reise",
@@ -104,7 +114,13 @@
         "strom",
         "wasser",
         "gas",
-        "hausgeld"
+        "hausgeld",
+        "kamin",
+        "kaminkehrer",
+        "gez",
+        "telefon",
+        "internet",
+        "glasfaser"
     ],
     "SONSTIGES": [
         "mitteilung",

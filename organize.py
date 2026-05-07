@@ -62,6 +62,7 @@ DEFAULT_CATEGORIES = [
     "KINDERGELD",
     "GEHALT",
     "VEREIN",
+    "AUTO",
     "URLAUB",
     "HAUSNEBENKOSTEN",
     "SONSTIGES",
@@ -72,7 +73,7 @@ DEFAULT_CATEGORIES = [
 class Classification:
     sender: str
     category: str
-    customer_number: str
+    customer_number: Optional[str]
     title: str
     date: Optional[str]
     confidence: float
@@ -104,6 +105,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-log-file", default="organize_run.log", help="Path to plain-text run log (mirrors console output)")
     parser.add_argument("--category-hints-file", default="category_hints.json", help="JSON file with keywords per category")
     parser.add_argument("--keyword-fallback-min-score", type=int, default=2, help="Minimum keyword matches to apply keyword fallback")
+    parser.add_argument("--customer-number-hints-file", default="customer_number_hints.json", help="JSON file with labels/patterns for customer/reference number extraction")
     parser.add_argument("--ocr-max-pages", type=int, default=3, help="Max pages to OCR when PDF has little text")
     parser.add_argument("--process-nice", type=int, default=5, help="Increase niceness to lower CPU priority")
     parser.add_argument("--max-cpu-threads", type=int, default=4, help="Limit CPU threads for OCR/BLAS libs (0 disables)")
@@ -454,6 +456,77 @@ def add_hints_to_prompt(prompt: str, category_hints: dict[str, list[str]]) -> st
     return prompt + hints_block
 
 
+def load_customer_number_hints(hints_path: Path) -> dict[str, list[str]]:
+    if not hints_path.exists():
+        return {"labels": [], "patterns": []}
+
+    try:
+        raw = json.loads(hints_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"labels": [], "patterns": []}
+
+    if not isinstance(raw, dict):
+        return {"labels": [], "patterns": []}
+
+    labels_raw = raw.get("labels", [])
+    patterns_raw = raw.get("patterns", [])
+
+    labels = [str(v).strip().lower() for v in labels_raw if str(v).strip()] if isinstance(labels_raw, list) else []
+    patterns = [str(v).strip() for v in patterns_raw if str(v).strip()] if isinstance(patterns_raw, list) else []
+    return {"labels": labels, "patterns": patterns}
+
+
+def normalize_customer_number(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    v = str(value).strip()
+    if not v:
+        return None
+    if v.lower() in {"null", "none", "n/a", "na", "keine", "ohne", "unknown"}:
+        return None
+    v = re.sub(r"\s+", " ", v)
+    return v
+
+
+def extract_customer_number_from_hints(text: str, hints: dict[str, list[str]]) -> Optional[str]:
+    if not text.strip():
+        return None
+
+    # Normalize whitespace to keep regex matching predictable.
+    norm_text = re.sub(r"[\t\r ]+", " ", text)
+
+    for pattern in hints.get("patterns", []):
+        try:
+            m = re.search(pattern, norm_text, flags=re.IGNORECASE)
+        except re.error:
+            continue
+        if not m:
+            continue
+        candidate = m.group(1) if m.groups() else m.group(0)
+        normalized = normalize_customer_number(candidate)
+        if normalized:
+            return normalized
+
+    for label in hints.get("labels", []):
+        if not label:
+            continue
+        label_pattern = re.escape(label)
+        m = re.search(
+            rf"{label_pattern}\s*[:#\-]?\s*([A-Za-z0-9][A-Za-z0-9\-./ ]{{2,40}})",
+            norm_text,
+            flags=re.IGNORECASE,
+        )
+        if not m:
+            continue
+        candidate = m.group(1).strip()
+        candidate = re.split(r"\s{2,}|\n", candidate)[0].strip()
+        normalized = normalize_customer_number(candidate)
+        if normalized:
+            return normalized
+
+    return None
+
+
 def keyword_category_fallback(
     text: str,
     category_hints: dict[str, list[str]],
@@ -580,10 +653,7 @@ def normalize_classification(data: dict, categories: list[str]) -> Classificatio
     if category not in categories:
         category = "SONSTIGES"
 
-    customer_number_raw = data.get("customer_number")
-    customer_number = "ohne_kundennummer"
-    if customer_number_raw is not None:
-        customer_number = str(customer_number_raw).strip() or "ohne_kundennummer"
+    customer_number = normalize_customer_number(data.get("customer_number"))
 
     title = str(data.get("title", "unbekanntes_dokument")).strip()
     if not title:
@@ -626,14 +696,16 @@ def plan_target_path(
     date_part = ensure_date(classification.date)
     sender_part = slugify(classification.sender)
     category_part = slugify(classification.category, uppercase=True)
-    customer_number_part = slugify(classification.customer_number)
+    customer_number_part = slugify(classification.customer_number) if classification.customer_number else ""
     title_part = slugify(classification.title)
     ext = src.suffix.lower()
     year_part = date_part[:4]
 
-    filename = (
-        f"{date_part}_{sender_part}_{category_part}_{customer_number_part}_{title_part}{ext}"
-    )
+    filename_parts = [date_part, sender_part, category_part]
+    if customer_number_part:
+        filename_parts.append(customer_number_part)
+    filename_parts.append(title_part)
+    filename = "_".join(filename_parts) + ext
 
     if classification.confidence < min_confidence:
         target = review_root / filename
@@ -709,6 +781,11 @@ def main() -> int:
         hints_path = base_dir / hints_path
     category_hints = load_category_hints(hints_path, categories)
 
+    customer_number_hints_path = Path(args.customer_number_hints_file).expanduser()
+    if not customer_number_hints_path.is_absolute():
+        customer_number_hints_path = base_dir / customer_number_hints_path
+    customer_number_hints = load_customer_number_hints(customer_number_hints_path)
+
     files = list(iter_input_files(input_dir, args.sorted_dir, args.review_dir))
     if not files:
         emit("[INFO] Keine verarbeitbaren Dateien gefunden.", run_log_path)
@@ -735,6 +812,11 @@ def main() -> int:
     emit(f"[INFO] Modell: {active_model}", run_log_path)
     emit(f"[INFO] Dateien: {len(files)}", run_log_path)
     emit(f"[INFO] category_hints: {hints_path} ({len(category_hints)} categories)", run_log_path)
+    emit(
+        f"[INFO] customer_number_hints: {customer_number_hints_path} "
+        f"(labels={len(customer_number_hints.get('labels', []))}, patterns={len(customer_number_hints.get('patterns', []))})",
+        run_log_path,
+    )
     emit(
         "[INFO] Limits: "
         f"nice=+{args.process_nice}, "
@@ -795,6 +877,13 @@ def main() -> int:
                 cls.confidence = max(cls.confidence, args.min_confidence)
                 keyword_fallback_applied = True
 
+            customer_number_from_hints = False
+            if not cls.customer_number:
+                extracted_customer_number = extract_customer_number_from_hints(text, customer_number_hints)
+                if extracted_customer_number:
+                    cls.customer_number = extracted_customer_number
+                    customer_number_from_hints = True
+
             target = plan_target_path(
                 src=src,
                 classification=cls,
@@ -841,6 +930,7 @@ def main() -> int:
                     "ocr_pdf_rebuild": should_rebuild_ocr_pdf,
                     "keyword_fallback_applied": keyword_fallback_applied,
                     "keyword_fallback_score": keyword_fallback_score,
+                    "customer_number_from_hints": customer_number_from_hints,
                     "model": active_model,
                 }
             )

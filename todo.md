@@ -20,3 +20,7 @@
         URLAUB
         HAUSNEBENKOSTEN
         SONSTIGES
+[x] Neue Katergorien
+        AUTO
+        
+        

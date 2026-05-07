@@ -105,10 +105,11 @@ pip install -r requirements.txt
 
 ## Dateinamenschema (Vorschlag)
 
-YYYY-MM-DD_ABSENDER_FIRMA_KATEGORIE_KUNDENNUMMER_TITEL.pdf
+YYYY-MM-DD_ABSENDER_FIRMA_KATEGORIE_[KUNDENNUMMER]_TITEL.pdf
 
 Beispiel:
 - 2026-03-11_stadtwerke_RECHNUNG_123456_abschlag_april.pdf
+- 2026-03-11_stadtwerke_RECHNUNG_abschlag_april.pdf (wenn keine Kundennummer gefunden wird)
 
 Regeln:
 - Umlaute normalisieren (ae, oe, ue, ss)
@@ -222,6 +223,22 @@ python3 organize.py \
   --category-hints-file ./category_hints.json \
   --keyword-fallback-min-score 2
 ```
+
+### Kundennummer/Referenznummer-Hinweise (optional, empfohlen)
+
+Datei:
+
+- `customer_number_hints.json` (liegt im Projektordner)
+
+Option:
+
+- `--customer-number-hints-file ./customer_number_hints.json`
+
+Verhalten:
+
+1. Wenn das LLM keine Kundennummer liefert, durchsucht das Script den Text nach Labels/Patterns.
+2. Treffer werden als `customer_number` uebernommen (z. B. Kundennummer, Vertragsnummer, Konto, IBAN).
+3. Ohne Treffer wird kein Platzhalter in den Dateinamen geschrieben.
 
 ### Fehlerbild: "[SKIP] ... kein Text extrahiert"
 
