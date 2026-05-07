@@ -70,7 +70,9 @@ DEFAULT_CATEGORIES = [
 
 @dataclass
 class Classification:
+    sender: str
     category: str
+    customer_number: str
     title: str
     date: Optional[str]
     confidence: float
@@ -395,9 +397,11 @@ def build_prompt(text: str, categories: list[str]) -> str:
         "Kategorisiere das Dokument in eine der erlaubten Kategorien.\n"
         f"Erlaubte Kategorien: {categories_str}\n"
         "Erzeuge exakt dieses JSON-Schema:\n"
-        '{"category":"...","title":"...","date":"YYYY-MM-DD oder null","confidence":0.0}\n'
+        '{"sender":"...","category":"...","customer_number":"... oder null","title":"...","date":"YYYY-MM-DD oder null","confidence":0.0}\n'
         "Regeln:\n"
+        "- sender: Firma/Institution/Absender kurz und praezise\n"
         "- category MUSS eine erlaubte Kategorie sein\n"
+        "- customer_number: Kunden-/Vertrags-/Mitgliedsnummer, sonst null\n"
         "- title kurz und praezise\n"
         "- confidence zwischen 0 und 1\n"
         "- wenn Datum unsicher, setze null\n\n"
@@ -532,9 +536,18 @@ def call_ollama(
 
 
 def normalize_classification(data: dict, categories: list[str]) -> Classification:
+    sender = str(data.get("sender", "unbekannter_absender")).strip()
+    if not sender:
+        sender = "unbekannter_absender"
+
     category = str(data.get("category", "SONSTIGES")).strip().upper()
     if category not in categories:
         category = "SONSTIGES"
+
+    customer_number_raw = data.get("customer_number")
+    customer_number = "ohne_kundennummer"
+    if customer_number_raw is not None:
+        customer_number = str(customer_number_raw).strip() or "ohne_kundennummer"
 
     title = str(data.get("title", "unbekanntes_dokument")).strip()
     if not title:
@@ -546,7 +559,14 @@ def normalize_classification(data: dict, categories: list[str]) -> Classificatio
 
     confidence = parse_confidence(data.get("confidence", 0.0))
 
-    return Classification(category=category, title=title, date=date, confidence=confidence)
+    return Classification(
+        sender=sender,
+        category=category,
+        customer_number=customer_number,
+        title=title,
+        date=date,
+        confidence=confidence,
+    )
 
 
 def write_log(log_path: Path, payload: dict) -> None:
@@ -568,12 +588,16 @@ def plan_target_path(
     min_confidence: float,
 ) -> Path:
     date_part = ensure_date(classification.date)
+    sender_part = slugify(classification.sender)
     category_part = slugify(classification.category, uppercase=True)
+    customer_number_part = slugify(classification.customer_number)
     title_part = slugify(classification.title)
     ext = src.suffix.lower()
     year_part = date_part[:4]
 
-    filename = f"{date_part}_{category_part}_{title_part}{ext}"
+    filename = (
+        f"{date_part}_{sender_part}_{category_part}_{customer_number_part}_{title_part}{ext}"
+    )
 
     if classification.confidence < min_confidence:
         target = review_root / filename
@@ -762,7 +786,9 @@ def main() -> int:
                     "status": "ok",
                     "source": str(src),
                     "target": str(target),
+                    "sender": cls.sender,
                     "category": cls.category,
+                    "customer_number": cls.customer_number,
                     "title": cls.title,
                     "date": ensure_date(cls.date),
                     "confidence": cls.confidence,

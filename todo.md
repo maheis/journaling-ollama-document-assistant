@@ -3,7 +3,7 @@
 [ ] LLM nicht entladen aus dem RAM
 [x] Dry-Run in logfile
 [x] Ordner-Sortierung nach Jahreszahl
-[ ] YYYY-MM-DD_ABSENDER/FIRMA_KATEGORIE_KUNDENNUMMER_TITEL.ext
+[x] YYYY-MM-DD_ABSENDER/FIRMA_KATEGORIE_KUNDENNUMMER_TITEL.ext
 [x] Kategorien überarbeiten
         RECHNUNG
         VERTRAG

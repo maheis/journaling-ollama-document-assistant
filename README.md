@@ -84,10 +84,10 @@ pip install -r requirements.txt
 
 ## Dateinamenschema (Vorschlag)
 
-YYYY-MM-DD_KATEGORIE_TITEL.pdf
+YYYY-MM-DD_ABSENDER_FIRMA_KATEGORIE_KUNDENNUMMER_TITEL.pdf
 
 Beispiel:
-- 2026-03-11_RECHNUNG_stadtwerke_abschlag.pdf
+- 2026-03-11_stadtwerke_RECHNUNG_123456_abschlag_april.pdf
 
 Regeln:
 - Umlaute normalisieren (ae, oe, ue, ss)
