@@ -63,6 +63,27 @@ ollama pull qwen2.5:3b-instruct
 ollama pull qwen2.5:7b-instruct
 ```
 
+### 3a) Installierte Modelle anzeigen
+
+```bash
+ollama list
+```
+
+Alternativ per API:
+
+```bash
+curl -s http://127.0.0.1:11434/api/tags
+```
+
+### 3b) Modelle aktualisieren
+
+Modelle werden durch erneutes Pull aktualisiert:
+
+```bash
+ollama pull qwen2.5:3b-instruct
+ollama pull qwen2.5:7b-instruct
+```
+
 ### 4) Python-Umgebung
 
 ```bash
@@ -126,6 +147,12 @@ Beispielstruktur:
 ```bash
 python3 organize.py --input ./inbox --dry-run --model qwen2.5:7b-instruct
 ```
+
+Hinweis zur Modellauswahl:
+
+- Wenn `--model` gesetzt ist, wird genau dieses Modell verwendet.
+- Wenn `--model` leer bleibt und genau ein Modell installiert ist, wird dieses automatisch genutzt.
+- Bei mehreren installierten Modellen ohne `--model` bricht das Script mit Hinweis ab.
 
 ### Echter Lauf (Dateien werden verschoben/umbenannt)
 

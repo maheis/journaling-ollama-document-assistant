@@ -88,7 +88,7 @@ class ExtractionResult:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Organize documents with a local Ollama model")
     parser.add_argument("--input", required=True, help="Input folder with documents")
-    parser.add_argument("--model", default="qwen2.5:7b-instruct", help="Ollama model name")
+    parser.add_argument("--model", default="", help="Ollama model name (empty = auto if exactly one model installed)")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434", help="Ollama base URL")
     parser.add_argument("--ollama-timeout", type=int, default=420, help="Ollama request timeout in seconds")
     parser.add_argument("--ollama-retries", type=int, default=2, help="Retries on timeout/error")
@@ -538,6 +538,39 @@ def call_ollama(
     return {}
 
 
+def get_installed_models(ollama_url: str, timeout_seconds: int) -> list[str]:
+    endpoint = ollama_url.rstrip("/") + "/api/tags"
+    response = requests.get(endpoint, timeout=max(5, min(timeout_seconds, 30)))
+    response.raise_for_status()
+    body = response.json()
+    models = body.get("models", [])
+    names: list[str] = []
+    for model in models:
+        if isinstance(model, dict):
+            name = str(model.get("name", "")).strip()
+            if name:
+                names.append(name)
+    return names
+
+
+def resolve_model(selected_model: str, ollama_url: str, timeout_seconds: int) -> str:
+    if selected_model.strip():
+        return selected_model.strip()
+
+    models = get_installed_models(ollama_url, timeout_seconds)
+    if len(models) == 1:
+        return models[0]
+
+    if len(models) == 0:
+        raise RuntimeError(
+            "Kein Ollama-Modell installiert. Bitte zuerst z. B. 'ollama pull qwen2.5:3b-instruct' ausfuehren."
+        )
+
+    raise RuntimeError(
+        "Mehrere Ollama-Modelle installiert. Bitte --model angeben. Verfuegbar: " + ", ".join(models)
+    )
+
+
 def normalize_classification(data: dict, categories: list[str]) -> Classification:
     sender = str(data.get("sender", "unbekannter_absender")).strip()
     if not sender:
@@ -682,6 +715,12 @@ def main() -> int:
         emit(f"[INFO] run_log: {run_log_path}", run_log_path)
         return 0
 
+    try:
+        active_model = resolve_model(args.model, args.ollama_url, args.ollama_timeout)
+    except Exception as exc:
+        emit(f"[ERROR] Modellauswahl fehlgeschlagen: {exc}", run_log_path)
+        return 2
+
     stats = {
         "seen": 0,
         "processed": 0,
@@ -693,7 +732,7 @@ def main() -> int:
     }
 
     emit(f"[INFO] Modus: {'APPLY' if apply_changes else 'DRY-RUN'}", run_log_path)
-    emit(f"[INFO] Modell: {args.model}", run_log_path)
+    emit(f"[INFO] Modell: {active_model}", run_log_path)
     emit(f"[INFO] Dateien: {len(files)}", run_log_path)
     emit(f"[INFO] category_hints: {hints_path} ({len(category_hints)} categories)", run_log_path)
     emit(
@@ -731,7 +770,7 @@ def main() -> int:
             prompt = add_hints_to_prompt(prompt, category_hints)
             model_raw = call_ollama(
                 ollama_url=args.ollama_url,
-                model=args.model,
+                model=active_model,
                 prompt=prompt,
                 timeout_seconds=args.ollama_timeout,
                 retries=args.ollama_retries,
@@ -802,7 +841,7 @@ def main() -> int:
                     "ocr_pdf_rebuild": should_rebuild_ocr_pdf,
                     "keyword_fallback_applied": keyword_fallback_applied,
                     "keyword_fallback_score": keyword_fallback_score,
-                    "model": args.model,
+                    "model": active_model,
                 }
             )
             write_log(log_path, event)
