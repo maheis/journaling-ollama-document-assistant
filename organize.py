@@ -685,6 +685,10 @@ def main() -> int:
         emit(f"- {k}: {v}", run_log_path)
     emit(f"- log: {log_path}", run_log_path)
     emit(f"- run_log: {run_log_path}", run_log_path)
+    emit(
+        f"[RUN] {datetime.now().isoformat(timespec='seconds')} finished status={'ok' if stats['errors'] == 0 else 'error'}",
+        run_log_path,
+    )
 
     return 0 if stats["errors"] == 0 else 1
 
