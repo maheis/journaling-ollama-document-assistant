@@ -2,7 +2,7 @@
 [x] Dateien ohne OCR als OCR ablegen...
 [ ] LLM nicht entladen aus dem RAM
 [x] Dry-Run in logfile
-[ ] Ordner-Sortierung nach Jahreszahl
+[x] Ordner-Sortierung nach Jahreszahl
 [ ] YYYY-MM-DD_ABSENDER/FIRMA_KATEGORIE_KUNDENNUMMER_TITEL.ext
 [x] Kategorien überarbeiten
         RECHNUNG

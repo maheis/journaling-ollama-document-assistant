@@ -118,7 +118,7 @@ Beispielstruktur:
 
 - `inbox/` enthaelt neue Dokumente
 - Script erzeugt bei Bedarf:
-  - `_sorted/KATEGORIE/...`
+  - `_sorted/YYYY/...`
   - `_review/...` (bei niedriger Confidence)
 
 ### Dry-Run (empfohlen als erster Lauf)

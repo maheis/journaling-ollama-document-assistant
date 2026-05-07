@@ -571,13 +571,14 @@ def plan_target_path(
     category_part = slugify(classification.category, uppercase=True)
     title_part = slugify(classification.title)
     ext = src.suffix.lower()
+    year_part = date_part[:4]
 
     filename = f"{date_part}_{category_part}_{title_part}{ext}"
 
     if classification.confidence < min_confidence:
         target = review_root / filename
     else:
-        target = sorted_root / category_part / filename
+        target = sorted_root / year_part / filename
 
     target.parent.mkdir(parents=True, exist_ok=True)
     return unique_path(target)
