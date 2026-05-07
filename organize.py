@@ -693,6 +693,7 @@ def main() -> int:
     }
 
     emit(f"[INFO] Modus: {'APPLY' if apply_changes else 'DRY-RUN'}", run_log_path)
+    emit(f"[INFO] Modell: {args.model}", run_log_path)
     emit(f"[INFO] Dateien: {len(files)}", run_log_path)
     emit(f"[INFO] category_hints: {hints_path} ({len(category_hints)} categories)", run_log_path)
     emit(
