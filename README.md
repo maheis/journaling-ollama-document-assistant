@@ -1,6 +1,6 @@
 # Ollama Document Assistant auf Proxmox (CPU-only)
 
-Dieses Projekt beschreibt eine lokale Dokument-Automatisierung mit Ollama [https://ollama.com] unter Debian.
+Dieses Projekt beschreibt eine lokale Dokument-Automatisierung mit Ollama [https://ollama.com] unter Debian und mit dem Copilot entstanden.
 
 ## Ziel
 
@@ -10,7 +10,7 @@ Dokumente lokal verarbeiten, um:
 - sinnvolle Dateinamen zu erzeugen
 - sicher umzubenennen (erst Dry-Run, dann Apply)
 
-## Hardware-Profil (dein Setup)
+## Hardware-Profil (mein/dein Setup)
 
 - Host CPU: Intel Core i5-10210U (4C/8T)
 - Host RAM: 16 GB
@@ -38,6 +38,14 @@ CPU-only auf i5-10210U:
 
 Wichtig:
 - OCR (Tesseract) ist haeufig der groesste Zeitanteil, nicht das LLM selbst.
+
+## Ist Performance
+
+qwen2.5:3b-instruct 
+6-7 Minuten pro Dokument 
+
+qwen2.5:7b-instruct
+15-20Minuten pro Dokument
 
 ## Debian Setup
 
@@ -103,7 +111,7 @@ pip install -r requirements.txt
 - Alle Umbenennungen protokollieren (CSV/JSON)
 - Produktivlauf nachts einplanen, um andere VMs nicht zu stoeren
 
-## Dateinamenschema (Vorschlag)
+## Dateinamenschema
 
 YYYY-MM-DD_ABSENDER_FIRMA_KATEGORIE_[KUNDENNUMMER]_TITEL.pdf
 
@@ -116,22 +124,22 @@ Regeln:
 - Sonderzeichen entfernen
 - Kollisionen mit Suffix aufloesen (_1, _2, ...)
 
-## Schneller Testplan (30-60 Minuten)
-
-1. 20 echte Dokumente in eine Test-Inbox legen.
-2. Pipeline mit 3B im Dry-Run ausfuehren.
-3. Korrektheit von Kategorie und Titel bewerten.
-4. Gleiches Set mit 7B testen.
-5. Modell mit bester Balance aus Qualitaet und Laufzeit waehlen.
-
-Abnahmekriterium:
-- mindestens 85-90 Prozent korrekte Kategorisierung
-- keine riskanten Fehlumbenennungen dank Review-Pfad
-
 ## Cron (optional)
 
 ```cron
 0 2 * * * /home/USER/doc-ai/.venv/bin/python /home/USER/doc-ai/organize.py --input /srv/docs/inbox --apply >> /var/log/doc-ai.log 2>&1
+
+35       20       *       *       *       python3 ~/ollama-document-assistant/organize.py --input ~/ollama-document-assistant/inbox --dry-run --model qwen2.5:3b-instruct
+35       22       *       *       *       python3 ~/ollama-document-assistant/organize.py --input ~/ollama-document-assistant/inbox --dry-run --model qwen2.5:7b-instruct
+# *       *       *       *       *       Befehl der ausgeführt werden soll
+# -       -       -       -       -
+# |       |       |       |       |
+# |       |       |       |       +----- Wochentag (0 - 7) (Sonntag ist 0 und 7; oder Namen, siehe unten)
+# |       |       |       +------- Monat (1 - 12)
+# |       |       +--------- Tag (1 - 31)
+# |       +----------- Stunde (0 - 23)
+# +------------- Minute (0 - 59; oder Namen, siehe unten)
+
 ```
 
 ## Nutzung von organize.py
@@ -340,8 +348,6 @@ Damit sollte auch dieser einfache Aufruf robuster laufen:
 python3 organize.py --input ./inbox --dry-run --model qwen2.5:3b-instruct
 ```
 
-## Naechste Schritte
+## Lizenz
 
-2. qwen2.5:3b und qwen2.5:7b gegeneinander testen.
-3. CPU-Last mit `--max-cpu-threads 4 --ollama-num-thread 4` einpegeln.
-4. Wenn OPNsense/Home Assistant Lastspitzen sehen: auf `--max-cpu-threads 2 --ollama-num-thread 2` reduzieren.
+MIT, siehe [LICENSE](LICENSE).
