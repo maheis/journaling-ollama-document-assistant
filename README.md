@@ -158,6 +158,8 @@ Hinweise:
 - Standard ohne `--apply` ist Dry-Run
 - Nur unterstuetzte Dateitypen werden verarbeitet (`.pdf`, Bilder, `.txt`, `.md`, ...)
 - Bei PDF ohne brauchbaren Text greift OCR (wenn Tesseract + pdf2image installiert sind)
+- PDF ohne Textlayer werden im `--apply` Lauf als OCR-PDF neu erzeugt und dann im Ziel abgelegt
+- Im Log steht dafuer `ocr_pdf_rebuild: true`
 
 ### Fehlerbild: "[SKIP] ... kein Text extrahiert"
 

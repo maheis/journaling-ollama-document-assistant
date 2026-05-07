@@ -30,9 +30,10 @@ from typing import Optional
 import requests
 
 try:
-    from pypdf import PdfReader
+    from pypdf import PdfReader, PdfWriter
 except Exception:
     PdfReader = None
+    PdfWriter = None
 
 try:
     from pdf2image import convert_from_path
@@ -65,6 +66,13 @@ class Classification:
     title: str
     date: Optional[str]
     confidence: float
+
+
+@dataclass
+class ExtractionResult:
+    text: str
+    has_native_pdf_text: bool
+    used_ocr: bool
 
 
 def parse_args() -> argparse.Namespace:
@@ -160,22 +168,30 @@ def unique_path(target: Path) -> Path:
         i += 1
 
 
-def extract_text(path: Path, ocr_lang: str, ocr_max_pages: int) -> str:
+def extract_text(path: Path, ocr_lang: str, ocr_max_pages: int) -> ExtractionResult:
     ext = path.suffix.lower()
 
     if ext in SUPPORTED_TEXT_EXT:
-        return path.read_text(encoding="utf-8", errors="ignore")
+        return ExtractionResult(
+            text=path.read_text(encoding="utf-8", errors="ignore"),
+            has_native_pdf_text=True,
+            used_ocr=False,
+        )
 
     if ext in SUPPORTED_IMAGE_EXT:
         if pytesseract is None:
-            return ""
+            return ExtractionResult(text="", has_native_pdf_text=True, used_ocr=False)
         try:
             from PIL import Image
 
             with Image.open(path) as img:
-                return pytesseract.image_to_string(img, lang=ocr_lang)
+                return ExtractionResult(
+                    text=pytesseract.image_to_string(img, lang=ocr_lang),
+                    has_native_pdf_text=True,
+                    used_ocr=True,
+                )
         except Exception:
-            return ""
+            return ExtractionResult(text="", has_native_pdf_text=True, used_ocr=False)
 
     if ext == ".pdf":
         chunks: list[str] = []
@@ -187,7 +203,9 @@ def extract_text(path: Path, ocr_lang: str, ocr_max_pages: int) -> str:
             except Exception:
                 pass
 
-        combined = "\n".join(chunks).strip()
+        native_text = "\n".join(chunks).strip()
+        combined = native_text
+        used_ocr = False
 
         # Fallback to pdftotext for PDFs that pypdf cannot extract reliably.
         if len(combined) < 400 and shutil.which("pdftotext"):
@@ -202,6 +220,7 @@ def extract_text(path: Path, ocr_lang: str, ocr_max_pages: int) -> str:
                 pdftext = (proc.stdout or "").strip()
                 if len(pdftext) > len(combined):
                     combined = pdftext
+                    native_text = pdftext
             except Exception:
                 pass
 
@@ -213,6 +232,7 @@ def extract_text(path: Path, ocr_lang: str, ocr_max_pages: int) -> str:
                 ocr_text = "\n".join(ocr_chunks).strip()
                 if len(ocr_text) > len(combined):
                     combined = ocr_text
+                    used_ocr = True
             except Exception:
                 pass
 
@@ -257,12 +277,88 @@ def extract_text(path: Path, ocr_lang: str, ocr_max_pages: int) -> str:
                     cli_ocr_text = "\n".join(ocr_chunks).strip()
                     if len(cli_ocr_text) > len(combined):
                         combined = cli_ocr_text
+                        used_ocr = True
             except Exception:
                 pass
 
-        return combined
+        has_native_pdf_text = len(native_text.strip()) >= 80
+        return ExtractionResult(
+            text=combined,
+            has_native_pdf_text=has_native_pdf_text,
+            used_ocr=used_ocr,
+        )
 
-    return ""
+    return ExtractionResult(text="", has_native_pdf_text=True, used_ocr=False)
+
+
+def build_ocr_pdf(source_pdf: Path, target_pdf: Path, ocr_lang: str) -> bool:
+    if not (shutil.which("pdftoppm") and shutil.which("tesseract")):
+        return False
+
+    page_pdfs: list[Path] = []
+    try:
+        with tempfile.TemporaryDirectory(prefix="ocr_rebuild_") as tmpdir:
+            tmp_path = Path(tmpdir)
+            image_prefix = tmp_path / "page"
+
+            render = subprocess.run(
+                ["pdftoppm", "-png", str(source_pdf), str(image_prefix)],
+                capture_output=True,
+                text=True,
+                timeout=600,
+                check=False,
+            )
+            if render.returncode != 0:
+                return False
+
+            images = sorted(tmp_path.glob("page-*.png"))
+            if not images:
+                return False
+
+            for idx, img_path in enumerate(images, start=1):
+                outbase = tmp_path / f"ocr_page_{idx:04d}"
+                ocr = subprocess.run(
+                    ["tesseract", str(img_path), str(outbase), "-l", ocr_lang, "pdf"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    check=False,
+                )
+                page_pdf = Path(f"{outbase}.pdf")
+                if ocr.returncode == 0 and page_pdf.exists():
+                    page_pdfs.append(page_pdf)
+
+            if not page_pdfs:
+                return False
+
+            if len(page_pdfs) == 1:
+                shutil.copy2(page_pdfs[0], target_pdf)
+                return target_pdf.exists()
+
+            if shutil.which("pdfunite"):
+                merge = subprocess.run(
+                    ["pdfunite", *[str(p) for p in page_pdfs], str(target_pdf)],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    check=False,
+                )
+                if merge.returncode == 0 and target_pdf.exists():
+                    return True
+
+            if PdfReader is not None and PdfWriter is not None:
+                writer = PdfWriter()
+                for page_pdf in page_pdfs:
+                    reader = PdfReader(str(page_pdf))
+                    for page in reader.pages:
+                        writer.add_page(page)
+                with target_pdf.open("wb") as f:
+                    writer.write(f)
+                return target_pdf.exists()
+    except Exception:
+        return False
+
+    return False
 
 
 def build_no_text_hint(path: Path) -> str:
@@ -452,6 +548,7 @@ def main() -> int:
         "seen": 0,
         "processed": 0,
         "renamed": 0,
+        "ocr_rebuilt": 0,
         "review": 0,
         "errors": 0,
         "skipped_empty": 0,
@@ -476,8 +573,8 @@ def main() -> int:
         }
 
         try:
-            text = extract_text(src, ocr_lang=args.lang, ocr_max_pages=args.ocr_max_pages)
-            text = (text or "").strip()
+            extracted = extract_text(src, ocr_lang=args.lang, ocr_max_pages=args.ocr_max_pages)
+            text = (extracted.text or "").strip()
 
             if not text:
                 stats["skipped_empty"] += 1
@@ -508,9 +605,23 @@ def main() -> int:
                 min_confidence=args.min_confidence,
             )
 
+            should_rebuild_ocr_pdf = (
+                src.suffix.lower() == ".pdf"
+                and (not extracted.has_native_pdf_text)
+                and extracted.used_ocr
+            )
+
             in_review = cls.confidence < args.min_confidence
             if apply_changes:
-                shutil.move(str(src), str(target))
+                if should_rebuild_ocr_pdf:
+                    rebuilt = build_ocr_pdf(src, target, args.lang)
+                    if rebuilt:
+                        src.unlink(missing_ok=True)
+                        stats["ocr_rebuilt"] += 1
+                    else:
+                        shutil.move(str(src), str(target))
+                else:
+                    shutil.move(str(src), str(target))
 
             stats["processed"] += 1
             stats["renamed"] += 1
@@ -527,13 +638,17 @@ def main() -> int:
                     "date": ensure_date(cls.date),
                     "confidence": cls.confidence,
                     "review": in_review,
+                    "ocr_pdf_rebuild": should_rebuild_ocr_pdf,
                     "model": args.model,
                 }
             )
             write_log(log_path, event)
 
             flag = "REVIEW" if in_review else "SORTED"
-            action = "MOVE" if apply_changes else "PLAN"
+            if should_rebuild_ocr_pdf:
+                action = "OCR+MOVE" if apply_changes else "OCR+PLAN"
+            else:
+                action = "MOVE" if apply_changes else "PLAN"
             print(
                 f"[{action}/{flag}] {src.name} -> {target.name} "
                 f"(cat={cls.category}, conf={cls.confidence:.2f})"
