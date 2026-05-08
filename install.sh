@@ -50,6 +50,56 @@ cmd_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+set_or_generate_web_password() {
+  local password_file="$1"
+  local entered=""
+  local confirm=""
+
+  # In non-interactive mode, keep existing password or generate a new one.
+  if [[ ! -t 0 ]]; then
+    if [[ -f "$password_file" ]]; then
+      chmod 600 "$password_file"
+      echo "Keeping existing password file (non-interactive mode): $password_file"
+      return
+    fi
+    "$VENV_DIR/bin/python" - <<'PY' > "$password_file"
+import secrets
+print(secrets.token_urlsafe(24))
+PY
+    chmod 600 "$password_file"
+    echo "Generated password file (non-interactive mode): $password_file"
+    return
+  fi
+
+  while true; do
+    read -r -s -p "Web-Login Passwort (leer = automatisch erzeugen): " entered
+    echo
+
+    if [[ -z "$entered" ]]; then
+      "$VENV_DIR/bin/python" - <<'PY' > "$password_file"
+import secrets
+print(secrets.token_urlsafe(24))
+PY
+      chmod 600 "$password_file"
+      echo "Generated password file: $password_file"
+      return
+    fi
+
+    read -r -s -p "Passwort bestaetigen: " confirm
+    echo
+
+    if [[ "$entered" != "$confirm" ]]; then
+      echo "[WARN] Passwoerter stimmen nicht ueberein, bitte erneut eingeben."
+      continue
+    fi
+
+    printf '%s\n' "$entered" > "$password_file"
+    chmod 600 "$password_file"
+    echo "Saved password file: $password_file"
+    return
+  done
+}
+
 ensure_assistant_config() {
   if [[ -f "$PROJECT_DIR/assistant_config.json" ]]; then
     return
@@ -200,16 +250,7 @@ mkdir -p "$PROJECT_DIR/inbox"
 ensure_assistant_config
 
 echo "[5/7] Ensuring web password file"
-if [[ ! -f "$PROJECT_DIR/.review_web_password" ]]; then
-  "$VENV_DIR/bin/python" - <<'PY' > "$PROJECT_DIR/.review_web_password"
-import secrets
-print(secrets.token_urlsafe(24))
-PY
-  chmod 600 "$PROJECT_DIR/.review_web_password"
-  echo "Generated new password file at $PROJECT_DIR/.review_web_password"
-else
-  chmod 600 "$PROJECT_DIR/.review_web_password"
-fi
+set_or_generate_web_password "$PROJECT_DIR/.review_web_password"
 
 if [[ "$PULL_MODELS" -eq 1 ]]; then
   echo "[6/7] Pulling Ollama model(s)"
