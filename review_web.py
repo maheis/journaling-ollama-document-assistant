@@ -535,6 +535,8 @@ HTML_PAGE = """<!doctype html>
         h1 { margin: 0 0 10px 0; font-size: 22px; letter-spacing: 0.2px; }
         .meta { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
         .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .filter-box { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+        .filter-box select { width: auto; min-width: 170px; }
         button {
             border: 1px solid var(--line);
             background: white;
@@ -602,6 +604,17 @@ HTML_PAGE = """<!doctype html>
                 <button onclick=\"reloadData()\">Neu laden</button>
                 <button class=\"secondary\" onclick=\"saveEdits()\">Aenderungen speichern</button>
                 <button class=\"primary\" onclick=\"deployAll()\">Deploy ausfuehren</button>
+                <label class="filter-box">
+                    Status-Filter
+                    <select id="status-filter" onchange="applyFilter()">
+                        <option value="all">Alle</option>
+                        <option value="open" selected>Offen (pending/saved/missing)</option>
+                        <option value="pending">Pending</option>
+                        <option value="saved">Saved</option>
+                        <option value="missing">Missing</option>
+                        <option value="deployed">Deployed</option>
+                    </select>
+                </label>
             </div>
             <div class=\"status\" id=\"status\"></div>
         </div>
@@ -630,6 +643,7 @@ HTML_PAGE = """<!doctype html>
 
 <script>
 let DATA = { rows: [], categories: [], value_memory: {} };
+let CURRENT_FILTER = 'open';
 
 function esc(v) {
     return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
@@ -734,6 +748,30 @@ function findRow(id) {
     return document.querySelector(`#rows tr[data-id="${CSS.escape(id)}"]`);
 }
 
+function matchesFilter(row) {
+    const status = String(row.status || 'pending').toLowerCase();
+    if (CURRENT_FILTER === 'all') {
+        return true;
+    }
+    if (CURRENT_FILTER === 'open') {
+        return status === 'pending' || status === 'saved' || status === 'missing';
+    }
+    return status === CURRENT_FILTER;
+}
+
+function renderRows() {
+    const shownRows = (DATA.rows || []).filter(matchesFilter);
+    document.getElementById('rows').innerHTML = shownRows.map(rowMarkup).join('');
+    return shownRows.length;
+}
+
+function applyFilter() {
+    const select = document.getElementById('status-filter');
+    CURRENT_FILTER = (select?.value || 'all').toLowerCase();
+    const shownCount = renderRows();
+    status(`Filter aktiv: ${CURRENT_FILTER}. Angezeigt: ${shownCount}.`);
+}
+
 async function reloadData() {
     status('Lade Daten...');
     const res = await fetch('/api/pending');
@@ -744,14 +782,14 @@ async function reloadData() {
     const openCount = (counts.pending || 0) + (counts.saved || 0) + (counts.missing || 0);
     document.getElementById('meta').textContent = `Log: ${payload.log_file} | State: ${payload.state_file} | Aliases: ${payload.aliases_file} | Pending=${counts.pending || 0}, Saved=${counts.saved || 0}, Missing=${counts.missing || 0}, Deployed=${counts.deployed || 0}`;
 
-    document.getElementById('rows').innerHTML = payload.rows.map(rowMarkup).join('');
+    const shownCount = renderRows();
     const dlSender = `<datalist id=\"sender-mem\">${optionsFor('sender')}</datalist>`;
     const dlCustomer = `<datalist id=\"customer_number-mem\">${optionsFor('customer_number')}</datalist>`;
     const dlTitle = `<datalist id=\"title-mem\">${optionsFor('title')}</datalist>`;
 
     document.querySelectorAll('datalist').forEach(n => n.remove());
     document.body.insertAdjacentHTML('beforeend', dlSender + dlCustomer + dlTitle);
-    status(`Bereit. ${openCount} offene Eintraege.`);
+    status(`Bereit. ${openCount} offene Eintraege, ${shownCount} angezeigt.`);
 }
 
 async function saveEdits() {

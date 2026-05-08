@@ -251,6 +251,11 @@ Funktionen in der UI:
 4. Deploy ausfuehren (global oder pro Zeile; erst dann werden Dateien verschoben)
 5. Expliziter Status pro Eintrag: `PENDING`, `SAVED`, `MISSING`, `DEPLOYED`
 6. Pro Feld Lern-Haken setzen (z. B. `adac_autoversicherung_ag` -> `ADAC`)
+7. Status-Filter: `Alle`, `Offen`, `Pending`, `Saved`, `Missing`, `Deployed`
+
+Hinweis:
+
+- Freigegebene/Deployte Dokumente bleiben in der Liste sichtbar und koennen ueber den Filter gezielt angezeigt oder ausgeblendet werden.
 
 Lernen fuer zukuenftige Dokumente:
 
