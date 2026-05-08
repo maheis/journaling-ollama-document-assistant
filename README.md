@@ -1,6 +1,7 @@
 # Ollama Document Assistant (Debian, CPU-only)
 
-Lokale Dokument-Automatisierung mit Ollama, OCR und Web-Review.
+Lokale Dokument-Automatisierung mit [Ollama](https://ollama.com), OCR und Web-Review.
+Dieses Projekt ist in Zusammenarbeit mit dem Copilot entstanden.
 
 Wichtiges Prinzip:
 
@@ -184,18 +185,13 @@ systemctl --user enable --now ollama-document-assistant.service
 systemctl --user status ollama-document-assistant.service
 ```
 
-## Modell-Empfehlung (CPU-only)
+## Modell-Standard
 
-Testreihenfolge:
+Es wird durchgaengig `qwen2.5:7b-instruct` verwendet.
 
-1. `qwen2.5:3b-instruct`
-2. `qwen2.5:7b-instruct`
-3. `llama3.1:8b`
-
-Praxisprofil:
-
-- Standard: `qwen2.5:7b-instruct`
-- Fallback bei Last: `qwen2.5:3b-instruct`
+- Default in `assistant_config.json`
+- Default in `organize.py`
+- Default fuer `install.sh --pull-models`
 
 ## Wichtige organize.py Optionen
 
@@ -235,9 +231,8 @@ python3 organize.py --input ./inbox --dry-run --model qwen2.5:7b-instruct --olla
 
 Wenn noetig:
 
-1. auf `qwen2.5:3b-instruct` wechseln
-2. `--max-text-chars` reduzieren
-3. Ollama API pruefen: `curl http://127.0.0.1:11434/api/tags`
+1. `--max-text-chars` reduzieren
+2. Ollama API pruefen: `curl http://127.0.0.1:11434/api/tags`
 
 ### CPU drosseln
 
@@ -245,7 +240,7 @@ Wenn noetig:
 python3 organize.py \
   --input ./inbox \
   --dry-run \
-  --model qwen2.5:3b-instruct \
+  --model qwen2.5:7b-instruct \
   --process-nice 8 \
   --max-cpu-threads 2 \
   --ollama-num-thread 2 \
@@ -253,7 +248,5 @@ python3 organize.py \
 ```
 
 ## Lizenz
-
-MIT, siehe `LICENSE`.
 
 MIT, siehe [LICENSE](LICENSE).

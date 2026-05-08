@@ -89,7 +89,7 @@ class ExtractionResult:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Organize documents with a local Ollama model")
     parser.add_argument("--input", required=True, help="Input folder with documents")
-    parser.add_argument("--model", default="", help="Ollama model name (empty = auto if exactly one model installed)")
+    parser.add_argument("--model", default="qwen2.5:7b-instruct", help="Ollama model name")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434", help="Ollama base URL")
     parser.add_argument("--ollama-timeout", type=int, default=1800, help="Ollama request timeout in seconds")
     parser.add_argument("--ollama-retries", type=int, default=0, help="Retries on timeout/error")
@@ -773,7 +773,7 @@ def resolve_model(selected_model: str, ollama_url: str, timeout_seconds: int) ->
 
     if len(models) == 0:
         raise RuntimeError(
-            "Kein Ollama-Modell installiert. Bitte zuerst z. B. 'ollama pull qwen2.5:3b-instruct' ausfuehren."
+            "Kein Ollama-Modell installiert. Bitte zuerst z. B. 'ollama pull qwen2.5:7b-instruct' ausfuehren."
         )
 
     raise RuntimeError(

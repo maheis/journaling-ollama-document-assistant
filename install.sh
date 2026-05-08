@@ -20,7 +20,7 @@ Options:
   --install-system-deps
                        Install required Debian/Ubuntu packages via apt-get
   --install-ollama     Install Ollama and try to start/enable service
-  --pull-models        Pull model(s) in Ollama (from config or --model)
+  --pull-models        Pull model(s) in Ollama (default: qwen2.5:7b-instruct)
   --model <name>       Model name to pull (repeatable by comma: m1,m2)
   --no-systemd         Do not install user systemd unit
   --no-start           Install unit but do not start/restart it
