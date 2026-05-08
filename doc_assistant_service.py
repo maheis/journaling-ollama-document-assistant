@@ -34,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run review web UI and periodic organize dry-runs")
     parser.add_argument("--config-file", default="assistant_config.json", help="Path to shared JSON config file")
     parser.add_argument("--input", default=None, help="Inbox directory for organize.py")
+    parser.add_argument("--output", default=None, help="Output base directory for organize.py (_sorted/_review)")
     parser.add_argument("--model", default=None, help="Ollama model for organize.py (optional)")
     parser.add_argument("--interval-seconds", type=int, default=None, help="Seconds between dry-run scans")
     parser.add_argument("--host", default=None, help="Host for review_web.py")
@@ -88,6 +89,8 @@ def build_organize_cmd(args: argparse.Namespace, project_dir: Path) -> list[str]
     ]
     if args.model.strip():
         cmd.extend(["--model", args.model.strip()])
+    if args.output.strip():
+        cmd.extend(["--output-root", args.output.strip()])
 
     # Keep this generic for future tuning without code edits.
     cmd.extend(args.organize_extra_arg)
@@ -138,6 +141,7 @@ def main() -> int:
     section = get_section(config, "service")
 
     args.input = str(pick(args.input, section, "input", "")).strip()
+    args.output = str(pick(args.output, section, "output", "")).strip()
     args.model = str(pick(args.model, section, "model", "")).strip()
     args.interval_seconds = int(pick(args.interval_seconds, section, "interval_seconds", 300))
     args.host = str(pick(args.host, section, "host", "127.0.0.1")).strip()

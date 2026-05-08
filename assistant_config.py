@@ -69,6 +69,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         _validate_positive_int(errors, service, "interval_seconds", scope="service", min_value=30)
         _validate_positive_int(errors, service, "session_ttl_seconds", scope="service", min_value=300)
         _validate_str(errors, service, "input", scope="service")
+        _validate_str(errors, service, "output", scope="service")
         _validate_str(errors, service, "model", scope="service")
         _validate_str(errors, service, "state_file", scope="service")
         _validate_str(errors, service, "field_aliases_file", scope="service")

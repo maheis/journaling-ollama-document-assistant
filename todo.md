@@ -28,5 +28,8 @@
 [x] webseite muss gehärtet werden, ein login sollte aus ausreichend sein.
 [x] config-file für alle defaults, port, login etc.
 [x] install skript um alles einzurichten.
-[ ] inbox pfad konfigurierbar
-[ ] ausgabepfad konfigurierbar
+[x] inbox pfad konfigurierbar
+[x] ausgabepfad konfigurierbar
+[ ] log und jasonl sinnvoll verkaspern (persistieren auch über reboot hinaus)
+[ ] sinnvoller installationspfad
+[ ] installation über wget/curl (install.sh ziehen und dann abfahrt mit dem rest inkl. checkout.) 

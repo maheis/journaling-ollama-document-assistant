@@ -74,7 +74,17 @@ Gesteuert werden u. a.:
 - Host/Port der Weboberflaeche
 - Login-Passwortdatei
 - Scan-Intervall
-- Modell und Inbox fuer den Dienst
+- Modell sowie Inbox- und Ausgabepfad fuer den Dienst
+
+Beispiel (service-Block):
+
+```json
+"service": {
+  "input": "./inbox",
+  "output": "./output",
+  "model": "qwen2.5:7b-instruct"
+}
+```
 
 Start mit Config:
 

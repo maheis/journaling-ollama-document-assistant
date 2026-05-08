@@ -89,6 +89,7 @@ class ExtractionResult:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Organize documents with a local Ollama model")
     parser.add_argument("--input", required=True, help="Input folder with documents")
+    parser.add_argument("--output-root", default="", help="Output base folder for _sorted/_review (empty = use input folder)")
     parser.add_argument("--model", default="qwen2.5:7b-instruct", help="Ollama model name")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434", help="Ollama base URL")
     parser.add_argument("--ollama-timeout", type=int, default=1800, help="Ollama request timeout in seconds")
@@ -914,8 +915,12 @@ def main() -> int:
         emit(f"[ERROR] Input folder invalid: {input_dir}", run_log_path)
         return 2
 
-    sorted_root = input_dir / args.sorted_dir
-    review_root = input_dir / args.review_dir
+    output_root = Path(args.output_root).expanduser() if str(args.output_root).strip() else input_dir
+    if not output_root.is_absolute():
+        output_root = (Path.cwd() / output_root).resolve()
+
+    sorted_root = output_root / args.sorted_dir
+    review_root = output_root / args.review_dir
     log_path = build_tmp_dated_log_path(args.log_file, date_prefix)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -964,6 +969,8 @@ def main() -> int:
     emit(f"[INFO] Modus: {'APPLY' if apply_changes else 'DRY-RUN'}", run_log_path)
     emit(f"[INFO] Modell: {active_model}", run_log_path)
     emit(f"[INFO] Dateien: {len(files)}", run_log_path)
+    emit(f"[INFO] Input: {input_dir}", run_log_path)
+    emit(f"[INFO] Output: {output_root}", run_log_path)
     emit(f"[INFO] category_hints: {hints_path} ({len(category_hints)} categories)", run_log_path)
     emit(
         f"[INFO] customer_number_hints: {customer_number_hints_path} "

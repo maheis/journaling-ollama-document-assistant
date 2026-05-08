@@ -116,6 +116,7 @@ ensure_assistant_config() {
   },
   "service": {
     "input": "./inbox",
+    "output": "./output",
     "model": "qwen2.5:7b-instruct",
     "interval_seconds": 300,
     "host": "127.0.0.1",
