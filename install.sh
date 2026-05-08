@@ -12,6 +12,8 @@ INSTALL_SYSTEM_DEPS=0
 INSTALL_OLLAMA=0
 PULL_MODELS=0
 MODEL_OVERRIDE=""
+REPO_URL="https://github.com/maheis/ollama-document-assistant.git"
+REPO_REF=""
 
 print_usage() {
   cat <<'USAGE'
@@ -25,6 +27,8 @@ Options:
   --pull-models        Pull model(s) in Ollama (default: qwen2.5:7b-instruct)
   --model <name>       Model name to pull (repeatable by comma: m1,m2)
   --install-dir <dir>  Installation directory (default: ~/.local/share/ollama-document-assistant)
+  --repo-url <url>     Git repository URL for bootstrap checkout
+  --repo-ref <ref>     Optional git branch/tag/commit to checkout
   --no-systemd         Do not install user systemd unit
   --no-start           Install unit but do not start/restart it
   --help               Show this help
@@ -33,6 +37,7 @@ Examples:
   bash ./install.sh
   bash ./install.sh --full-setup
   bash ./install.sh --install-system-deps --install-ollama --pull-models --model qwen2.5:7b-instruct
+  curl -fsSL https://raw.githubusercontent.com/maheis/ollama-document-assistant/main/install.sh | bash -s -- --full-setup
 USAGE
 }
 
@@ -53,7 +58,65 @@ cmd_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+has_project_sources() {
+  local dir="$1"
+  [[ -f "$dir/organize.py" ]] &&
+    [[ -f "$dir/review_web.py" ]] &&
+    [[ -f "$dir/doc_assistant_service.py" ]] &&
+    [[ -f "$dir/assistant_config.py" ]] &&
+    [[ -f "$dir/requirements.txt" ]]
+}
+
+ensure_project_checkout() {
+  if has_project_sources "$SOURCE_DIR"; then
+    return
+  fi
+
+  if has_project_sources "$PROJECT_DIR"; then
+    SOURCE_DIR="$PROJECT_DIR"
+    return
+  fi
+
+  if ! cmd_exists git; then
+    echo "[ERROR] git is required for bootstrap checkout from --repo-url" >&2
+    exit 2
+  fi
+
+  if [[ -d "$PROJECT_DIR/.git" ]]; then
+    echo "Updating repository in $PROJECT_DIR"
+    (
+      cd "$PROJECT_DIR"
+      git fetch --all --tags --prune
+      if [[ -n "$REPO_REF" ]]; then
+        git checkout "$REPO_REF"
+      fi
+      git pull --ff-only || true
+    )
+  else
+    if [[ -d "$PROJECT_DIR" ]] && [[ -n "$(ls -A "$PROJECT_DIR" 2>/dev/null)" ]]; then
+      echo "[ERROR] Install directory is not empty and not a git repo: $PROJECT_DIR" >&2
+      echo "        Choose another --install-dir or clean the directory." >&2
+      exit 2
+    fi
+    rm -rf "$PROJECT_DIR"
+    git clone "$REPO_URL" "$PROJECT_DIR"
+    if [[ -n "$REPO_REF" ]]; then
+      (cd "$PROJECT_DIR" && git checkout "$REPO_REF")
+    fi
+  fi
+
+  if ! has_project_sources "$PROJECT_DIR"; then
+    echo "[ERROR] Repository checkout incomplete in $PROJECT_DIR" >&2
+    exit 2
+  fi
+  SOURCE_DIR="$PROJECT_DIR"
+}
+
 sync_project_files() {
+  if [[ "$SOURCE_DIR" == "$PROJECT_DIR" ]]; then
+    return
+  fi
+
   mkdir -p "$PROJECT_DIR/systemd"
 
   local files=(
@@ -243,6 +306,22 @@ while [[ $# -gt 0 ]]; do
       fi
       PROJECT_DIR="$1"
       ;;
+    --repo-url)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "[ERROR] --repo-url requires a value" >&2
+        exit 2
+      fi
+      REPO_URL="$1"
+      ;;
+    --repo-ref)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "[ERROR] --repo-ref requires a value" >&2
+        exit 2
+      fi
+      REPO_REF="$1"
+      ;;
     --no-systemd)
       INSTALL_SYSTEMD=0
       ;;
@@ -275,6 +354,9 @@ if ! cmd_exists "$PYTHON_BIN"; then
   exit 2
 fi
 echo "Install dir: $PROJECT_DIR"
+
+echo "[prep] Ensuring project checkout"
+ensure_project_checkout
 
 echo "[prep] Syncing project files to install dir"
 sync_project_files

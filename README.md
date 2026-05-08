@@ -23,6 +23,18 @@ cd ollama-document-assistant
 bash ./install.sh --full-setup
 ```
 
+Alternative ohne manuelles Clone (Bootstrap via curl/wget):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maheis/ollama-document-assistant/main/install.sh | bash -s -- --full-setup
+```
+
+oder
+
+```bash
+wget -qO- https://raw.githubusercontent.com/maheis/ollama-document-assistant/main/install.sh | bash -s -- --full-setup
+```
+
 3) Service starten (falls nicht schon durch Install-Skript gestartet)
 
 ```bash
@@ -132,6 +144,8 @@ Optionen:
 - `--pull-models`: Modell(e) mit `ollama pull` laden
 - `--model <name>`: Modell explizit setzen (mehrere per Komma)
 - `--install-dir <pfad>`: Installationspfad ueberschreiben
+- `--repo-url <url>`: alternatives Git-Repository fuer Bootstrap-Checkout
+- `--repo-ref <ref>`: Branch/Tag/Commit fuer Bootstrap-Checkout
 
 Hinweise:
 

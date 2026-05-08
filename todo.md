@@ -32,4 +32,4 @@
 [x] ausgabepfad konfigurierbar
 [ ] log und jasonl sinnvoll verkaspern (persistieren auch über reboot hinaus)
 [x] sinnvoller installationspfad
-[ ] installation über wget/curl (install.sh ziehen und dann abfahrt mit dem rest inkl. checkout.) 
+[x] installation über wget/curl (install.sh ziehen und dann abfahrt mit dem rest inkl. checkout.)
