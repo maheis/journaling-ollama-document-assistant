@@ -320,7 +320,7 @@ systemctl --user status ollama-document-assistant.service
 
 ## Installation per Script
 
-Automatisches Setup (venv, deps, inbox, password, systemd-user-unit):
+Automatisches Setup (venv, Python-deps, inbox, password, systemd-user-unit):
 
 ```bash
 bash ./install.sh
@@ -330,6 +330,23 @@ Optionen:
 
 - `--no-systemd`: keine Unit installieren
 - `--no-start`: Unit installieren, aber nicht sofort starten
+- `--full-setup`: zusaetzlich Systempakete + Ollama + Modell-Pull
+- `--install-system-deps`: installiert apt-Pakete (Debian/Ubuntu)
+- `--install-ollama`: installiert Ollama (falls nicht vorhanden)
+- `--pull-models`: zieht Modell(e) via `ollama pull`
+- `--model qwen2.5:7b-instruct`: Modell explizit setzen (oder mehrere per Komma)
+
+Beispiele:
+
+```bash
+bash ./install.sh --full-setup
+bash ./install.sh --install-system-deps --install-ollama --pull-models --model qwen2.5:7b-instruct
+```
+
+Hinweise:
+
+- Das Skript macht **kein** `git clone` oder Checkout.
+- Bei `--install-system-deps` sind Root-Rechte erforderlich (`sudo` oder root).
 
 Funktionen in der UI:
 
