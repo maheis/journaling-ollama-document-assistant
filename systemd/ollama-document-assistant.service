@@ -1,0 +1,14 @@
+[Unit]
+Description=Ollama Document Assistant (dry-run scanner + review web)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/ollama-document-assistant
+ExecStart=%h/ollama-document-assistant/.venv/bin/python %h/ollama-document-assistant/doc_assistant_service.py --input %h/ollama-document-assistant/inbox --host 127.0.0.1 --port 8765 --interval-seconds 300 --model qwen2.5:7b-instruct
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

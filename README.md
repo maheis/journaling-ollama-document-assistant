@@ -242,6 +242,44 @@ python3 review_web.py --host 127.0.0.1 --port 8765
 
 - `http://127.0.0.1:8765`
 
+### Automatischer Dienst (Inbox triggern + Weboberflaeche hosten)
+
+Es gibt jetzt einen kombinierten Dienst:
+
+- startet `review_web.py` dauerhaft
+- startet `organize.py` automatisch im Dry-Run Intervall
+- finales Umbenennen bleibt weiterhin nur ueber Web-Deploy
+
+Manuell starten:
+
+```bash
+python3 doc_assistant_service.py \
+  --input ./inbox \
+  --model qwen2.5:7b-instruct \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --interval-seconds 300
+```
+
+Wichtige Parameter:
+
+- `--interval-seconds 300`: Inbox-Scan alle 5 Minuten
+- `--organize-extra-arg ...`: Extra-Flags an `organize.py` durchreichen (repeatable)
+
+systemd Vorlage:
+
+- Datei: `systemd/ollama-document-assistant.service`
+
+Beispiel-Installation (User-Unit):
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp ./systemd/ollama-document-assistant.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now ollama-document-assistant.service
+systemctl --user status ollama-document-assistant.service
+```
+
 Funktionen in der UI:
 
 1. Eintraege in Spalten bearbeiten: Sender, Kategorie, Kunden-Nr, Titel, Datum
