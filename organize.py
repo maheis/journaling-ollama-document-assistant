@@ -91,7 +91,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", required=True, help="Input folder with documents")
     parser.add_argument("--model", default="", help="Ollama model name (empty = auto if exactly one model installed)")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434", help="Ollama base URL")
-    parser.add_argument("--ollama-timeout", type=int, default=420, help="Ollama request timeout in seconds")
+    parser.add_argument("--ollama-timeout", type=int, default=900, help="Ollama request timeout in seconds")
     parser.add_argument("--ollama-retries", type=int, default=2, help="Retries on timeout/error")
     parser.add_argument("--ollama-retry-backoff", type=float, default=1.5, help="Backoff factor between retries")
     parser.add_argument("--ollama-keep-alive", default="24h", help="Keep model loaded in RAM (e.g. 24h, 30m, -1)")

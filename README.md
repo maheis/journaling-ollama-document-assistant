@@ -176,7 +176,7 @@ python3 organize.py \
   --input /srv/docs/inbox \
   --apply \
   --model qwen2.5:7b-instruct \
-  --ollama-timeout 420 \
+  --ollama-timeout 900 \
   --ollama-retries 2 \
   --ollama-keep-alive 24h \
   --process-nice 5 \
@@ -289,7 +289,7 @@ python3 organize.py \
   --input ./inbox \
   --dry-run \
   --model qwen2.5:7b-instruct \
-  --ollama-timeout 420 \
+  --ollama-timeout 900 \
   --ollama-retries 2 \
   --max-text-chars 8000
 ```
@@ -316,7 +316,7 @@ python3 organize.py \
   --input ./inbox \
   --dry-run \
   --model qwen2.5:3b-instruct \
-  --ollama-timeout 420 \
+  --ollama-timeout 900 \
   --ollama-retries 2 \
   --max-text-chars 6000 \
   --process-nice 8 \
@@ -336,6 +336,7 @@ Wenn der Host trotzdem noch zu stark ausgelastet ist:
 Aktuelle Defaults sind CPU-sicher gesetzt:
 
 - `--ollama-timeout 420`
+- `--ollama-timeout 900`
 - `--ollama-retries 2`
 - `--ollama-keep-alive 24h`
 - `--max-text-chars 6000`
