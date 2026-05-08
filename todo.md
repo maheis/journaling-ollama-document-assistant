@@ -28,3 +28,5 @@
 [x] webseite muss gehärtet werden, ein login sollte aus ausreichend sein.
 [x] config-file für alle defaults, port, login etc.
 [x] install skript um alles einzurichten.
+[ ] inbox pfad konfigurierbar
+[ ] ausgabepfad konfigurierbar

@@ -58,7 +58,7 @@ ensure_assistant_config() {
 {
   "review_web": {
     "host": "127.0.0.1",
-    "port": 8765,
+    "port": 8449,
     "state_file": "review_state.json",
     "field_aliases_file": "field_aliases.json",
     "auth_password_file": ".review_web_password",
@@ -69,7 +69,7 @@ ensure_assistant_config() {
     "model": "qwen2.5:7b-instruct",
     "interval_seconds": 300,
     "host": "127.0.0.1",
-    "port": 8765,
+    "port": 8449,
     "state_file": "review_state.json",
     "field_aliases_file": "field_aliases.json",
     "auth_password_file": ".review_web_password",
@@ -263,7 +263,7 @@ echo "[done] Installation finished"
 echo "Project dir: $PROJECT_DIR"
 echo "Config file: $PROJECT_DIR/assistant_config.json"
 echo "Password file: $PROJECT_DIR/.review_web_password"
-echo "Review URL: http://127.0.0.1:8765"
+echo "Review URL: http://127.0.0.1:8449"
 
 echo "Current web password:"
 head -n 1 "$PROJECT_DIR/.review_web_password"

@@ -1249,7 +1249,7 @@ def main() -> int:
     aliases_file_arg = str(pick(args.field_aliases_file, section, "field_aliases_file", "field_aliases.json")).strip()
     session_ttl_seconds = int(pick(args.session_ttl_seconds, section, "session_ttl_seconds", 28800))
     host = str(pick(args.host, section, "host", "127.0.0.1")).strip()
-    port = int(pick(args.port, section, "port", 8765))
+    port = int(pick(args.port, section, "port", 8449))
 
     categories_raw = pick(args.categories, section, "categories", DEFAULT_CATEGORIES)
     if not isinstance(categories_raw, list):

@@ -141,7 +141,7 @@ def main() -> int:
     args.model = str(pick(args.model, section, "model", "")).strip()
     args.interval_seconds = int(pick(args.interval_seconds, section, "interval_seconds", 300))
     args.host = str(pick(args.host, section, "host", "127.0.0.1")).strip()
-    args.port = int(pick(args.port, section, "port", 8765))
+    args.port = int(pick(args.port, section, "port", 8449))
     args.state_file = str(pick(args.state_file, section, "state_file", "review_state.json")).strip()
     args.field_aliases_file = str(pick(args.field_aliases_file, section, "field_aliases_file", "field_aliases.json")).strip()
     args.auth_password = str(pick(args.auth_password, section, "auth_password", "")).strip()

@@ -1,314 +1,180 @@
-# Ollama Document Assistant auf Proxmox (CPU-only)
+# Ollama Document Assistant (Debian, CPU-only)
 
-Dieses Projekt beschreibt eine lokale Dokument-Automatisierung mit Ollama [https://ollama.com] unter Debian und ist mit dem Copilot entstanden.
+Lokale Dokument-Automatisierung mit Ollama, OCR und Web-Review.
 
-## Ziel
+Wichtiges Prinzip:
 
-Dokumente lokal verarbeiten, um:
-- Inhalte zu erkennen (inkl. OCR bei Scan-PDFs)
-- Dokumente zu kategorisieren
-- sinnvolle Dateinamen zu erzeugen
-- sicher umzubenennen (erst Dry-Run, dann Apply)
+- `organize.py` erzeugt immer nur Vorschlaege (Dry-Run)
+- finales Umbenennen passiert ausschliesslich per Deploy in der Weboberflaeche
 
-## Hardware-Profil (mein/dein Setup)
+## Quickstart (Debian)
 
-- Host CPU: Intel Core i5-10210U (4C/8T)
-- Host RAM: 16 GB
-
-## Modell-Empfehlung (Testreihenfolge)
-
-Teste in dieser Reihenfolge:
-
-1. qwen2.5:3b-instruct
-2. qwen2.5:7b-instruct
-3. llama3.1:8b
-
-Empfehlung fuer Dauerbetrieb:
-- Standard: qwen2.5:7b-instruct
-- Fallback bei Last: qwen2.5:3b-instruct
-- Optimum: llama3.1:8b
-
-Hinweis:
-- 14B-Modelle sind auf dieser CPU meist zu traege fuer den praktischen Mehrwert in dieser Pipeline.
-
-## Erwartbare Performance
-
-CPU-only auf i5-10210U:
-- kurze, textbasierte Dokumente: meist in Sekundenbereich bis niedriger zweistelliger Bereich
-- lange OCR-Scans: deutlich langsamer
-
-Wichtig:
-- OCR (Tesseract) ist haeufig der groesste Zeitanteil, nicht das LLM selbst.
-
-## Ist Performance
-
-qwen2.5:3b-instruct 
-9-10 Minuten pro Dokument 
-
-qwen2.5:7b-instruct
-15-20 Minuten pro Dokument
-
-llama3.1:8b
-20-25 Minuten pro Dokument
-
-
-## Debian Setup
-
-### 1) Systempakete
-
-```bash
-sudo apt update
-sudo apt install -y curl python3 python3-venv python3-pip tesseract-ocr tesseract-ocr-deu poppler-utils
-```
-
-### 2) Ollama
-
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-sudo systemctl enable ollama
-sudo systemctl start ollama
-```
-
-### 3) Modelle laden
-
-```bash
-ollama pull qwen2.5:3b-instruct
-ollama pull qwen2.5:7b-instruct
-```
-
-### 3a) Installierte Modelle anzeigen
-
-```bash
-ollama list
-```
-
-Alternativ per API:
-
-```bash
-curl -s http://127.0.0.1:11434/api/tags
-```
-
-### 3b) Modelle aktualisieren
-
-Modelle werden durch erneutes Pull aktualisiert:
-
-```bash
-ollama pull qwen2.5:3b-instruct
-ollama pull qwen2.5:7b-instruct
-```
-
-### 4) Python-Umgebung
+1) Repository klonen und in den Ordner wechseln
 
 ```bash
 git clone https://github.com/maheis/ollama-document-assistant.git
 cd ollama-document-assistant
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
 ```
 
-## Betriebsprofil (sicher)
+2) Komplettsetup ausfuehren
 
-- Immer zuerst mit --dry-run testen
-- Confidence-Schwelle setzen (z. B. 0.85)
-- Unterhalb Schwelle in Review-Ordner statt Auto-Rename
-- Alle Umbenennungen protokollieren (CSV/JSON)
-- Produktivlauf nachts einplanen, um andere VMs nicht zu stoeren
+```bash
+bash ./install.sh --full-setup
+```
+
+3) Service starten (falls nicht schon durch Install-Skript gestartet)
+
+```bash
+systemctl --user restart ollama-document-assistant.service
+```
+
+4) Weboberflaeche oeffnen
+
+```text
+http://127.0.0.1:8449
+```
+
+5) Passwort auslesen
+
+```bash
+head -n 1 ./.review_web_password
+```
+
+## Was das Projekt macht
+
+- Text aus PDF/TXT/MD/Bildern extrahieren (inkl. OCR-Fallback)
+- Dokumente mit lokalem LLM klassifizieren
+- saubere Zielnamen vorschlagen
+- Vorschlaege im Browser pruefen/anpassen
+- erst nach Freigabe deployen
+
+## Workflow
+
+1) Inbox fuellen (`./inbox`)
+2) Dry-Run erzeugt Vorschlaege
+3) Vorschlaege in der Web-UI pruefen
+4) einzelne oder alle Eintraege deployen
 
 ## Dateinamenschema
 
-YYYY-MM-DD_ABSENDER_FIRMA_KATEGORIE_[KUNDENNUMMER]_TITEL.pdf
+`YYYY-MM-DD_ABSENDER_KATEGORIE_[KUNDENNUMMER]_TITEL.ext`
 
-Beispiel:
-- 2026-03-11_stadtwerke_RECHNUNG_123456_abschlag_april.pdf
-- 2026-03-11_stadtwerke_RECHNUNG_abschlag_april.pdf (wenn keine Kundennummer gefunden wird)
+Beispiele:
 
-Regeln:
-- Umlaute normalisieren (ae, oe, ue, ss)
-- Sonderzeichen entfernen
-- Kollisionen mit Suffix aufloesen (_1, _2, ...)
-
-## Cron (optional)
-
-```cron
-0 2 * * * /home/USER/doc-ai/.venv/bin/python /home/USER/doc-ai/organize.py --input /srv/docs/inbox --dry-run >> /var/log/doc-ai.log 2>&1
-
-35       20       *       *       *       python3 ~/ollama-document-assistant/organize.py --input ~/ollama-document-assistant/inbox --dry-run --model qwen2.5:3b-instruct
-35       22       *       *       *       python3 ~/ollama-document-assistant/organize.py --input ~/ollama-document-assistant/inbox --dry-run --model qwen2.5:7b-instruct
-# *       *       *       *       *       Befehl der ausgeführt werden soll
-# -       -       -       -       -
-# |       |       |       |       |
-# |       |       |       |       +----- Wochentag (0 - 7) (Sonntag ist 0 und 7; oder Namen, siehe unten)
-# |       |       |       +------- Monat (1 - 12)
-# |       |       +--------- Tag (1 - 31)
-# |       +----------- Stunde (0 - 23)
-# +------------- Minute (0 - 59; oder Namen, siehe unten)
-
-```
-
-## Nutzung von organize.py
-
-Beispielstruktur:
-
-- `inbox/` enthaelt neue Dokumente
-- Script erzeugt bei Bedarf:
-  - `_sorted/YYYY/...`
-  - `_review/...` (bei niedriger Confidence)
-
-### Dry-Run (empfohlen als erster Lauf)
-
-```bash
-python3 organize.py --input ./inbox --dry-run --model qwen2.5:7b-instruct
-```
-
-Hinweis zur Modellauswahl:
-
-- Wenn `--model` gesetzt ist, wird genau dieses Modell verwendet.
-- Wenn `--model` leer bleibt und genau ein Modell installiert ist, wird dieses automatisch genutzt.
-- Bei mehreren installierten Modellen ohne `--model` bricht das Script mit Hinweis ab.
-
-### Finales Umbenennen (nur Web-Deploy)
-
-Das finale Verschieben/Umbenennen erfolgt ausschliesslich ueber `review_web.py` per Deploy-Button.
-
-`organize.py` erzeugt immer nur Vorschlaege (Dry-Run).
-
-### Wichtige Optionen
-
-```bash
-python3 organize.py \
-  --input /srv/docs/inbox \
-  --dry-run \
-  --model qwen2.5:7b-instruct \
-  --ollama-timeout 1800 \
-  --ollama-retries 0 \
-  --ollama-keep-alive 24h \
-  --process-nice 5 \
-  --max-cpu-threads 2 \
-  --ollama-num-thread 2 \
-  --sleep-between-files 0.4 \
-  --min-confidence 0.85 \
-  --max-text-chars 8000 \
-  --field-aliases-file field_aliases.json \
-  --sorted-dir _sorted \
-  --review-dir _review \
-  --log-file doc-organize.jsonl
-```
-
-Hinweise:
-
-- `organize.py` arbeitet immer als Dry-Run-Vorschlagsgenerator
-- `--apply` ist deaktiviert; finales Umbenennen erfolgt nur ueber Web-Deploy
-- Nur unterstuetzte Dateitypen werden verarbeitet (`.pdf`, Bilder, `.txt`, `.md`, ...)
-- Bei PDF ohne brauchbaren Text greift OCR (wenn Tesseract + pdf2image installiert sind)
-- Es werden immer zwei Logs geschrieben:
-  - JSONL Event-Log: `--log-file` (Standard `organize_log.jsonl`)
-  - Konsolen-Spiegel als Textlog: `--run-log-file` (Standard `organize_run.log`)
-  - Beide Logs werden immer unter `/tmp` geschrieben und mit Datum gepraefixt, z. B. `/tmp/2026-05-08_organize_log.jsonl`
-  - Bei den Optionen `--log-file` und `--run-log-file` wird nur der Dateiname verwendet
-- Das LLM bleibt per Default im RAM: `--ollama-keep-alive 24h`
-- Optionale Kategorie-Schlagworte aus `category_hints.json` werden verwendet
-- Bei unsicheren Faellen (`confidence` niedrig oder `SONSTIGES`) kann ein Keyword-Fallback die Kategorie korrigieren
+- `2026-03-11_stadtwerke_RECHNUNG_123456_abschlag_april.pdf`
+- `2026-03-11_stadtwerke_RECHNUNG_abschlag_april.pdf`
 
 ## Zentrale Konfiguration
 
-Es gibt jetzt eine zentrale Datei fuer Defaults:
+Zentrale Defaults liegen in `assistant_config.json`.
 
-- `assistant_config.json`
+Gesteuert werden u. a.:
 
-Sie steuert u. a.:
+- Host/Port der Weboberflaeche
+- Login-Passwortdatei
+- Scan-Intervall
+- Modell und Inbox fuer den Dienst
 
-- Port/Host der Weboberflaeche
-- Login/Passwortdatei
-- Scan-Intervall des Dienstes
-- Modell/Inbox fuer den Auto-Dry-Run
-
-Beispiel starten mit Config-Datei:
+Start mit Config:
 
 ```bash
 python3 review_web.py --config-file ./assistant_config.json
 python3 doc_assistant_service.py --config-file ./assistant_config.json
 ```
 
-Prioritaet der Werte:
+Prioritaet:
 
 - CLI-Flag > `assistant_config.json` > Script-Default
 
 Validierung:
 
-- `review_web.py` und `doc_assistant_service.py` validieren die Config beim Start.
-- Bei JSON- oder Schema-Fehlern wird mit klarer Fehlermeldung abgebrochen (Exit-Code 2).
+- `review_web.py` und `doc_assistant_service.py` validieren die Config beim Start
+- bei JSON- oder Schema-Fehlern: klare Meldung und Exit-Code `2`
 
-### Web-Review vor finalem Umbenennen (Deploy)
+## Installation per Script
 
-Ziel:
-
-- Vorschlaege zuerst in einer Weboberflaeche pruefen und anpassen
-- Dateien erst auf Knopfdruck deployen (dann werden sie wirklich verschoben/umbenannt)
-- Dokumente direkt aus der Tabelle oeffnen
-- Nicht deployte Eintraege bleiben sichtbar, bis sie deployt sind
-
-Dateien:
-
-- `review_web.py`: lokale Weboberflaeche
-- `review_state.json`: speichert offene/deployte Eintraege
-- `field_aliases.json`: gespeicherte Lernregeln fuer spaetere Laeufe
-
-1) Erst Vorschlaege erzeugen (Dry-Run):
+Basis-Setup (venv, Python-Dependencies, Inbox, Passwortdatei, optionale user-systemd Unit):
 
 ```bash
-python3 organize.py --input ./inbox --dry-run --model qwen2.5:7b-instruct
+bash ./install.sh
 ```
 
-2) Weboberflaeche starten:
+Vollsetup fuer Debian:
 
 ```bash
-python3 review_web.py --host 127.0.0.1 --port 8765 --auth-password-file ./.review_web_password
+bash ./install.sh --full-setup
 ```
 
-3) Im Browser oeffnen:
+Optionen:
 
-- `http://127.0.0.1:8765`
+- `--no-systemd`: keine user-systemd Unit installieren
+- `--no-start`: Unit installieren, aber nicht starten
+- `--full-setup`: aktiviert `--install-system-deps`, `--install-ollama`, `--pull-models`
+- `--install-system-deps`: apt-Pakete installieren (Debian/Ubuntu)
+- `--install-ollama`: Ollama installieren und starten
+- `--pull-models`: Modell(e) mit `ollama pull` laden
+- `--model <name>`: Modell explizit setzen (mehrere per Komma)
 
-Login einrichten (empfohlen):
+Hinweise:
+
+- kein `git clone`/Checkout im Skript
+- fuer apt-Schritte sind root/sudo Rechte noetig
+
+## Web-Review und Deploy
+
+Start (manuell):
+
+```bash
+python3 review_web.py --config-file ./assistant_config.json
+```
+
+UI-Funktionen:
+
+1. Spaltenweise bearbeiten (Sender, Kategorie, Kunden-Nr, Titel, Datum)
+2. Dokument direkt aus der Zeile oeffnen
+3. global oder pro Zeile speichern
+4. global oder pro Zeile deployen
+5. Status je Eintrag: `PENDING`, `SAVED`, `MISSING`, `DEPLOYED`
+6. Status-Filter: `Alle`, `Offen`, `Pending`, `Saved`, `Missing`, `Deployed`
+7. Lern-Haken pro Feld (Alias-Lernen)
+
+Hinweis:
+
+- deployte Dokumente bleiben sichtbar und sind filterbar
+
+## Sicherheit
+
+Login empfohlen:
 
 ```bash
 printf '%s\n' 'DEIN_STARKES_PASSWORT' > ./.review_web_password
 chmod 600 ./.review_web_password
 ```
 
-Sicherheitsverhalten:
+Verhalten:
 
-- Mit `--auth-password` oder `--auth-password-file` ist Login aktiv (Session-Cookie).
-- Ohne Login ist nur Localhost-Bind sinnvoll; Remote-Bind ohne Login wird blockiert.
+- mit `--auth-password` oder `--auth-password-file`: Login aktiv (Session-Cookie)
+- Remote-Bind ohne Login wird blockiert
 
-### Automatischer Dienst (Inbox triggern + Weboberflaeche hosten)
+## Dienstbetrieb (auto scan + web host)
 
-Es gibt jetzt einen kombinierten Dienst:
+Der Dienst `doc_assistant_service.py`:
 
 - startet `review_web.py` dauerhaft
-- startet `organize.py` automatisch im Dry-Run Intervall
-- finales Umbenennen bleibt weiterhin nur ueber Web-Deploy
+- startet `organize.py` periodisch im Dry-Run
+- restartet Web-Prozess bei Absturz
 
 Manuell starten:
 
 ```bash
-python3 doc_assistant_service.py \
-  --config-file ./assistant_config.json
+python3 doc_assistant_service.py --config-file ./assistant_config.json
 ```
 
-Wichtige Parameter:
-
-- `--interval-seconds 300`: Inbox-Scan alle 5 Minuten
-- `--organize-extra-arg ...`: Extra-Flags an `organize.py` durchreichen (repeatable)
-- `--auth-password-file ...`: Login fuer die Weboberflaeche aktivieren
-
-systemd Vorlage:
+User-systemd Unit:
 
 - Datei: `systemd/ollama-document-assistant.service`
 
-Beispiel-Installation (User-Unit):
+Installation:
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -318,112 +184,42 @@ systemctl --user enable --now ollama-document-assistant.service
 systemctl --user status ollama-document-assistant.service
 ```
 
-## Installation per Script
+## Modell-Empfehlung (CPU-only)
 
-Automatisches Setup (venv, Python-deps, inbox, password, systemd-user-unit):
+Testreihenfolge:
 
-```bash
-bash ./install.sh
-```
+1. `qwen2.5:3b-instruct`
+2. `qwen2.5:7b-instruct`
+3. `llama3.1:8b`
 
-Optionen:
+Praxisprofil:
 
-- `--no-systemd`: keine Unit installieren
-- `--no-start`: Unit installieren, aber nicht sofort starten
-- `--full-setup`: zusaetzlich Systempakete + Ollama + Modell-Pull
-- `--install-system-deps`: installiert apt-Pakete (Debian/Ubuntu)
-- `--install-ollama`: installiert Ollama (falls nicht vorhanden)
-- `--pull-models`: zieht Modell(e) via `ollama pull`
-- `--model qwen2.5:7b-instruct`: Modell explizit setzen (oder mehrere per Komma)
+- Standard: `qwen2.5:7b-instruct`
+- Fallback bei Last: `qwen2.5:3b-instruct`
 
-Beispiele:
-
-```bash
-bash ./install.sh --full-setup
-bash ./install.sh --install-system-deps --install-ollama --pull-models --model qwen2.5:7b-instruct
-```
-
-Hinweise:
-
-- Das Skript macht **kein** `git clone` oder Checkout.
-- Bei `--install-system-deps` sind Root-Rechte erforderlich (`sudo` oder root).
-
-Funktionen in der UI:
-
-1. Eintraege in Spalten bearbeiten: Sender, Kategorie, Kunden-Nr, Titel, Datum
-2. Dokument pro Zeile direkt oeffnen
-3. Aenderungen speichern ohne Deploy (global oder pro Zeile)
-4. Deploy ausfuehren (global oder pro Zeile; erst dann werden Dateien verschoben)
-5. Expliziter Status pro Eintrag: `PENDING`, `SAVED`, `MISSING`, `DEPLOYED`
-6. Pro Feld Lern-Haken setzen (z. B. `adac_autoversicherung_ag` -> `ADAC`)
-7. Status-Filter: `Alle`, `Offen`, `Pending`, `Saved`, `Missing`, `Deployed`
-
-Hinweis:
-
-- Freigegebene/Deployte Dokumente bleiben in der Liste sichtbar und koennen ueber den Filter gezielt angezeigt oder ausgeblendet werden.
-
-Lernen fuer zukuenftige Dokumente:
-
-- Gelerntes wird in `field_aliases.json` gespeichert.
-- `organize.py` nutzt diese Regeln automatisch bei neuen Laeufen.
-- Beispiel: Wenn Sender einmal von `adac_autoversicherung_ag` auf `ADAC` gelernt wurde, wird das in Zukunft direkt angewendet.
-
-### Kategorie-Schlagworte (optional, empfohlen)
-
-Datei:
-
-- `category_hints.json` (liegt im Projektordner)
-
-Neue Optionen:
-
-- `--category-hints-file category_hints.json`
-- `--keyword-fallback-min-score 2`
-
-Verhalten:
-
-1. Schlagworte werden als Zusatz-Hinweis in den Prompt gegeben.
-2. Ist das LLM unsicher oder liefert `SONSTIGES`, wird ein Keyword-Fallback geprueft.
-3. Bei eindeutigem Treffer (Score hoch genug) wird die Kategorie gesetzt.
-
-Beispiel:
+## Wichtige organize.py Optionen
 
 ```bash
 python3 organize.py \
   --input ./inbox \
   --dry-run \
-  --model qwen2.5:3b-instruct \
-  --category-hints-file ./category_hints.json \
-  --keyword-fallback-min-score 2
+  --model qwen2.5:7b-instruct \
+  --min-confidence 0.85 \
+  --max-text-chars 8000 \
+  --ollama-timeout 1800 \
+  --ollama-retries 0 \
+  --field-aliases-file field_aliases.json
 ```
 
-### Kundennummer/Referenznummer-Hinweise (optional, empfohlen)
+Wichtige Hinweise:
 
-Datei:
+- `--apply` ist deaktiviert
+- Logs landen in `/tmp` (mit Datums-Prefix)
+- bei wenig PDF-Text greift OCR
 
-- `customer_number_hints.json` (liegt im Projektordner)
+## Troubleshooting
 
-Option:
-
-- `--customer-number-hints-file ./customer_number_hints.json`
-
-Verhalten:
-
-1. Wenn das LLM keine Kundennummer liefert, durchsucht das Script den Text nach Labels/Patterns.
-2. Treffer werden priorisiert uebernommen: Kundennummer > Vertragsnummer > Mitgliedsnummer > Beitragsnummer > Konto/Kontonummer > IBAN (als spaeter Fallback).
-3. Ohne Treffer wird kein Platzhalter in den Dateinamen geschrieben.
-
-Datums-Fallback:
-
-- Wenn das LLM kein valides Datum liefert, versucht das Script zuerst ein Datum aus dem Dateinamen zu erkennen (z. B. `2025-10-01` oder `210427`).
-- Erst wenn das nicht moeglich ist, wird das aktuelle Tagesdatum verwendet.
-
-### Fehlerbild: "[SKIP] ... kein Text extrahiert"
-
-Wenn diese Meldung bei PDF-Dateien auftaucht, ist es meist ein Scan-PDF ohne eingebetteten Text und OCR konnte nicht greifen.
-
-Hinweis: Das Script nutzt jetzt auch einen CLI-Fallback (`pdftoppm` + `tesseract`), falls `pdf2image`/`pytesseract` im Python-Environment fehlen.
-
-Schnellchecks:
+### Kein Text extrahiert
 
 ```bash
 which pdftotext && pdftotext -v
@@ -431,92 +227,33 @@ which tesseract && tesseract --list-langs | grep -E 'deu|eng'
 python3 -c "import pypdf,pdf2image,pytesseract; print('python deps ok')"
 ```
 
-Test direkt auf eine betroffene Datei:
+### Ollama Timeout
 
 ```bash
-pdftotext -layout "2022-03-31 - Raiffeisenbank AGB Leana.pdf" - | head -n 20
+python3 organize.py --input ./inbox --dry-run --model qwen2.5:7b-instruct --ollama-timeout 1800 --ollama-retries 0
 ```
 
-Wenn dort nichts kommt, ist OCR erforderlich. Stelle sicher, dass `tesseract-ocr` und `tesseract-ocr-deu` installiert sind.
+Wenn noetig:
 
-Wenn im Log `pypdf=missing` / `pdf2image=missing` / `pytesseract=missing` steht, ist meist die falsche oder keine venv aktiv:
+1. auf `qwen2.5:3b-instruct` wechseln
+2. `--max-text-chars` reduzieren
+3. Ollama API pruefen: `curl http://127.0.0.1:11434/api/tags`
 
-```bash
-source .venv/bin/activate
-pip install -r requirements.txt
-python3 -c "import pypdf,pdf2image,pytesseract; print('python deps ok')"
-```
-
-### Fehlerbild: "Read timed out (timeout=180)" bei Ollama
-
-Auf CPU-only Systemen kann ein Modellaufruf bei langen Dokumenten laenger dauern als der Standard-Timeout.
-
-Empfohlener Lauf:
-
-```bash
-python3 organize.py \
-  --input ./inbox \
-  --dry-run \
-  --model qwen2.5:7b-instruct \
-  --ollama-timeout 1800 \
-  --ollama-retries 0 \
-  --max-text-chars 8000
-```
-
-Wenn es weiter zu Timeouts kommt:
-
-1. Modell auf `qwen2.5:3b-instruct` wechseln
-2. `--max-text-chars` weiter reduzieren (z. B. 5000)
-3. Sicherstellen, dass Ollama lokal laeuft: `curl http://127.0.0.1:11434/api/tags`
-
-### CPU-Nutzung begrenzen (Host entlasten)
-
-Das Script unterstuetzt eingebaute CPU-Drosselung:
-
-- `--process-nice 5`: Prozess laeuft mit niedrigerer Prioritaet
-- `--max-cpu-threads 4`: begrenzt Threads fuer OCR/BLAS-lastige Teile
-- `--ollama-num-thread 4`: begrenzt Threads fuer den Modellaufruf
-- `--sleep-between-files 0.4`: kurze Pause zwischen Dokumenten
-
-Empfehlung fuer deinen Host:
+### CPU drosseln
 
 ```bash
 python3 organize.py \
   --input ./inbox \
   --dry-run \
   --model qwen2.5:3b-instruct \
-  --ollama-timeout 1800 \
-  --ollama-retries 0 \
-  --max-text-chars 6000 \
   --process-nice 8 \
   --max-cpu-threads 2 \
   --ollama-num-thread 2 \
   --sleep-between-files 0.5
 ```
 
-Wenn der Host trotzdem noch zu stark ausgelastet ist:
-
-1. `--max-cpu-threads 1`
-2. `--ollama-num-thread 1`
-3. auf `qwen2.5:3b-instruct` bleiben
-
-### Standard-Defaults (ohne Zusatzflags)
-
-Aktuelle Defaults sind CPU-sicher gesetzt:
-
-- `--ollama-timeout 1800`
-- `--ollama-retries 0`
-- `--ollama-keep-alive 24h`
-- `--max-text-chars 6000`
-- `--max-cpu-threads 4`
-- `--ollama-num-thread 4`
-
-Damit sollte auch dieser einfache Aufruf robuster laufen:
-
-```bash
-python3 organize.py --input ./inbox --dry-run --model qwen2.5:3b-instruct
-```
-
 ## Lizenz
+
+MIT, siehe `LICENSE`.
 
 MIT, siehe [LICENSE](LICENSE).
