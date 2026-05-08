@@ -14,12 +14,16 @@ The app persists:
 from __future__ import annotations
 
 import argparse
+import hmac
 import hashlib
 import json
 import mimetypes
+import os
 import re
+import secrets
 import shutil
 import threading
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
@@ -142,6 +146,52 @@ class Paths:
     log_file: Path
     state_file: Path
     aliases_file: Path
+
+
+class PasswordAuth:
+    def __init__(self, password: str, session_ttl_seconds: int) -> None:
+        self.password = password
+        self.session_ttl_seconds = max(300, session_ttl_seconds)
+        self.sessions: dict[str, float] = {}
+        self.lock = threading.Lock()
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.password)
+
+    def create_session(self, password_attempt: str) -> Optional[str]:
+        if not self.enabled:
+            return ""
+        if not hmac.compare_digest(password_attempt, self.password):
+            return None
+        token = secrets.token_urlsafe(32)
+        with self.lock:
+            self.sessions[token] = time.time() + float(self.session_ttl_seconds)
+        return token
+
+    def is_valid(self, token: str) -> bool:
+        if not self.enabled:
+            return True
+        if not token:
+            return False
+
+        now = time.time()
+        with self.lock:
+            expiry = self.sessions.get(token)
+            if expiry is None:
+                return False
+            if expiry < now:
+                self.sessions.pop(token, None)
+                return False
+            # Sliding expiration while actively used.
+            self.sessions[token] = now + float(self.session_ttl_seconds)
+            return True
+
+    def clear_session(self, token: str) -> None:
+        if not token:
+            return
+        with self.lock:
+            self.sessions.pop(token, None)
 
 
 class ReviewStore:
@@ -863,15 +913,141 @@ reloadData();
 """
 
 
+LOGIN_PAGE = """<!doctype html>
+<html lang=\"de\">
+<head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>Login - Document Review Deploy</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top right, #ebe7d6 0%, #f5f4ef 40%), #f5f4ef;
+            color: #1d1f24;
+        }
+        .card {
+            width: min(420px, 92vw);
+            background: #fffdf6;
+            border: 1px solid #dfdccf;
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: 0 8px 30px rgba(30, 24, 10, 0.08);
+        }
+        h1 { margin: 0 0 12px 0; font-size: 24px; }
+        p { margin: 0 0 12px 0; color: #6d727d; }
+        input {
+            width: 100%;
+            border: 1px solid #d4cfbd;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+        button {
+            width: 100%;
+            border: 1px solid #0f766e;
+            background: #0f766e;
+            color: #fff;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .err { margin-top: 10px; color: #b91c1c; font-size: 13px; min-height: 18px; }
+    </style>
+</head>
+<body>
+    <form class=\"card\" onsubmit=\"return doLogin(event)\">
+        <h1>Login</h1>
+        <p>Bitte Passwort eingeben.</p>
+        <input id=\"pw\" type=\"password\" autocomplete=\"current-password\" placeholder=\"Passwort\" required />
+        <button type=\"submit\">Anmelden</button>
+        <div class=\"err\" id=\"err\"></div>
+    </form>
+
+<script>
+async function doLogin(event) {
+    event.preventDefault();
+    const pw = document.getElementById('pw').value;
+    const err = document.getElementById('err');
+    err.textContent = '';
+
+    const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw })
+    });
+
+    if (res.ok) {
+        window.location.href = '/';
+        return false;
+    }
+
+    err.textContent = 'Login fehlgeschlagen.';
+    return false;
+}
+</script>
+</body>
+</html>
+"""
+
+
 class Handler(BaseHTTPRequestHandler):
     store: ReviewStore
+    auth: PasswordAuth
 
     def log_message(self, fmt: str, *args: object) -> None:
         return
 
+    def _send_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self.send_header("Cache-Control", "no-store")
+
+    def _parse_cookies(self) -> dict[str, str]:
+        raw = self.headers.get("Cookie", "")
+        cookies: dict[str, str] = {}
+        for chunk in raw.split(";"):
+            if "=" not in chunk:
+                continue
+            key, value = chunk.split("=", 1)
+            cookies[key.strip()] = value.strip()
+        return cookies
+
+    def _session_token(self) -> str:
+        return self._parse_cookies().get("oda_session", "")
+
+    def _is_authenticated(self) -> bool:
+        if not self.auth.enabled:
+            return True
+        return self.auth.is_valid(self._session_token())
+
+    def _redirect(self, path: str) -> None:
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self._send_security_headers()
+        self.send_header("Location", path)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _require_auth(self, is_api: bool) -> bool:
+        if self._is_authenticated():
+            return True
+        if is_api:
+            self._json_response({"error": "unauthorized"}, status=401)
+        else:
+            self._redirect("/login")
+        return False
+
     def _json_response(self, payload: Any, status: int = 200) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
+        self._send_security_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
@@ -880,6 +1056,7 @@ class Handler(BaseHTTPRequestHandler):
     def _text_response(self, payload: str, status: int = 200, content_type: str = "text/html; charset=utf-8") -> None:
         raw = payload.encode("utf-8")
         self.send_response(status)
+        self._send_security_headers()
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
@@ -900,15 +1077,42 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
 
+        if parsed.path == "/login":
+            if not self.auth.enabled:
+                self._redirect("/")
+                return
+            if self._is_authenticated():
+                self._redirect("/")
+                return
+            self._text_response(LOGIN_PAGE)
+            return
+
         if parsed.path == "/":
+            if not self._require_auth(is_api=False):
+                return
             self._text_response(HTML_PAGE)
             return
 
         if parsed.path == "/api/pending":
+            if not self._require_auth(is_api=True):
+                return
             self._json_response(self.store.list_entries())
             return
 
+        if parsed.path == "/api/logout":
+            token = self._session_token()
+            self.auth.clear_session(token)
+            self.send_response(HTTPStatus.SEE_OTHER)
+            self._send_security_headers()
+            self.send_header("Set-Cookie", "oda_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict")
+            self.send_header("Location", "/login")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
         if parsed.path == "/file":
+            if not self._require_auth(is_api=False):
+                return
             params = parse_qs(parsed.query)
             item_id = (params.get("id") or [""])[0]
             path = self.store.file_path_for_id(item_id)
@@ -924,6 +1128,7 @@ class Handler(BaseHTTPRequestHandler):
 
             content_type, _ = mimetypes.guess_type(str(path))
             self.send_response(HTTPStatus.OK)
+            self._send_security_headers()
             self.send_header("Content-Type", content_type or "application/octet-stream")
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Content-Disposition", f"inline; filename={path.name}")
@@ -936,6 +1141,29 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         payload = self._read_json()
+
+        if parsed.path == "/api/login":
+            if not self.auth.enabled:
+                self._json_response({"ok": True, "auth": "disabled"})
+                return
+            password = str(payload.get("password", ""))
+            token = self.auth.create_session(password)
+            if not token:
+                self._json_response({"error": "invalid_credentials"}, status=401)
+                return
+
+            self.send_response(HTTPStatus.OK)
+            self._send_security_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Set-Cookie", "oda_session=" + token + "; Path=/; HttpOnly; SameSite=Strict")
+            body = json.dumps({"ok": True}).encode("utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if not self._require_auth(is_api=True):
+            return
 
         if parsed.path == "/api/save-edits":
             rows = payload.get("rows", []) if isinstance(payload.get("rows"), list) else []
@@ -968,10 +1196,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--log-file", default="", help="Path to JSONL log file (default: latest /tmp/*_organize_log.jsonl)")
     parser.add_argument("--state-file", default="review_state.json", help="State file path")
     parser.add_argument("--field-aliases-file", default="field_aliases.json", help="Aliases file shared with organize.py")
+    parser.add_argument("--auth-password", default="", help="Login password for web UI/API")
+    parser.add_argument("--auth-password-file", default="", help="File containing login password (first line)")
+    parser.add_argument("--session-ttl-seconds", type=int, default=28800, help="Session lifetime in seconds")
     parser.add_argument("--categories", nargs="+", default=DEFAULT_CATEGORIES, help="Allowed categories")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host")
     parser.add_argument("--port", type=int, default=8765, help="Bind port")
     return parser.parse_args()
+
+
+def resolve_auth_password(args: argparse.Namespace, base_dir: Path) -> str:
+    if args.auth_password_file.strip():
+        p = Path(args.auth_password_file).expanduser()
+        if not p.is_absolute():
+            p = base_dir / p
+        if p.exists():
+            try:
+                return p.read_text(encoding="utf-8").splitlines()[0].strip()
+            except Exception:
+                return ""
+    if args.auth_password.strip():
+        return args.auth_password.strip()
+    return os.environ.get("REVIEW_WEB_PASSWORD", "").strip()
 
 
 def main() -> int:
@@ -992,14 +1238,23 @@ def main() -> int:
     if "SONSTIGES" not in categories:
         categories.append("SONSTIGES")
 
+    auth_password = resolve_auth_password(args, base_dir)
+    auth = PasswordAuth(auth_password, args.session_ttl_seconds)
+
+    if not auth.enabled and args.host not in {"127.0.0.1", "localhost", "::1"}:
+        print("[ERROR] Remote bind without login is blocked. Set --auth-password or --auth-password-file.")
+        return 2
+
     store = ReviewStore(Paths(log_file=log_file, state_file=state_file, aliases_file=aliases_file), categories=categories)
 
     Handler.store = store
+    Handler.auth = auth
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Review app listening on http://{args.host}:{args.port}")
     print(f"Log file: {log_file}")
     print(f"State file: {state_file}")
     print(f"Aliases file: {aliases_file}")
+    print(f"Auth: {'enabled' if auth.enabled else 'disabled (localhost only recommended)'}")
 
     try:
         server.serve_forever()

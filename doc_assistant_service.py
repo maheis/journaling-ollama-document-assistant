@@ -37,6 +37,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=8765, help="Port for review_web.py")
     parser.add_argument("--state-file", default="review_state.json", help="State file for review_web.py")
     parser.add_argument("--field-aliases-file", default="field_aliases.json", help="Shared alias file")
+    parser.add_argument("--auth-password", default="", help="Login password for review_web.py")
+    parser.add_argument("--auth-password-file", default="", help="Password file for review_web.py")
+    parser.add_argument("--session-ttl-seconds", type=int, default=28800, help="Session lifetime for review_web.py")
     parser.add_argument("--python", default=sys.executable, help="Python executable")
     parser.add_argument("--project-dir", default="", help="Project directory (default: script location)")
     parser.add_argument(
@@ -60,7 +63,13 @@ def build_review_cmd(args: argparse.Namespace, project_dir: Path) -> list[str]:
         args.state_file,
         "--field-aliases-file",
         args.field_aliases_file,
+        "--session-ttl-seconds",
+        str(args.session_ttl_seconds),
     ]
+    if args.auth_password.strip():
+        cmd.extend(["--auth-password", args.auth_password.strip()])
+    if args.auth_password_file.strip():
+        cmd.extend(["--auth-password-file", args.auth_password_file.strip()])
     return cmd
 
 

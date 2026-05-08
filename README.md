@@ -235,12 +235,24 @@ python3 organize.py --input ./inbox --dry-run --model qwen2.5:7b-instruct
 2) Weboberflaeche starten:
 
 ```bash
-python3 review_web.py --host 127.0.0.1 --port 8765
+python3 review_web.py --host 127.0.0.1 --port 8765 --auth-password-file ./.review_web_password
 ```
 
 3) Im Browser oeffnen:
 
 - `http://127.0.0.1:8765`
+
+Login einrichten (empfohlen):
+
+```bash
+printf '%s\n' 'DEIN_STARKES_PASSWORT' > ./.review_web_password
+chmod 600 ./.review_web_password
+```
+
+Sicherheitsverhalten:
+
+- Mit `--auth-password` oder `--auth-password-file` ist Login aktiv (Session-Cookie).
+- Ohne Login ist nur Localhost-Bind sinnvoll; Remote-Bind ohne Login wird blockiert.
 
 ### Automatischer Dienst (Inbox triggern + Weboberflaeche hosten)
 
@@ -258,6 +270,7 @@ python3 doc_assistant_service.py \
   --model qwen2.5:7b-instruct \
   --host 127.0.0.1 \
   --port 8765 \
+  --auth-password-file ./.review_web_password \
   --interval-seconds 300
 ```
 
@@ -265,6 +278,7 @@ Wichtige Parameter:
 
 - `--interval-seconds 300`: Inbox-Scan alle 5 Minuten
 - `--organize-extra-arg ...`: Extra-Flags an `organize.py` durchreichen (repeatable)
+- `--auth-password-file ...`: Login fuer die Weboberflaeche aktivieren
 
 systemd Vorlage:
 

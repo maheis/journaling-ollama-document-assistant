@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/ollama-document-assistant
-ExecStart=%h/ollama-document-assistant/.venv/bin/python %h/ollama-document-assistant/doc_assistant_service.py --input %h/ollama-document-assistant/inbox --host 127.0.0.1 --port 8765 --interval-seconds 300 --model qwen2.5:7b-instruct
+ExecStart=%h/ollama-document-assistant/.venv/bin/python %h/ollama-document-assistant/doc_assistant_service.py --input %h/ollama-document-assistant/inbox --host 127.0.0.1 --port 8765 --interval-seconds 300 --model qwen2.5:7b-instruct --auth-password-file %h/ollama-document-assistant/.review_web_password
 Restart=always
 RestartSec=5
 
