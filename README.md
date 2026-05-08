@@ -21,11 +21,12 @@ Teste in dieser Reihenfolge:
 
 1. qwen2.5:3b-instruct
 2. qwen2.5:7b-instruct
-3. llama3.1:8b-instruct (optional Vergleich)
+3. llama3.1:8b
 
 Empfehlung fuer Dauerbetrieb:
 - Standard: qwen2.5:7b-instruct
 - Fallback bei Last: qwen2.5:3b-instruct
+- Optimum: llama3.1:8b
 
 Hinweis:
 - 14B-Modelle sind auf dieser CPU meist zu traege fuer den praktischen Mehrwert in dieser Pipeline.
@@ -42,10 +43,14 @@ Wichtig:
 ## Ist Performance
 
 qwen2.5:3b-instruct 
-6-7 Minuten pro Dokument 
+9-10 Minuten pro Dokument 
 
 qwen2.5:7b-instruct
-15-20Minuten pro Dokument
+15-20 Minuten pro Dokument
+
+llama3.1:8b
+20-25 Minuten pro Dokument
+
 
 ## Debian Setup
 
@@ -106,7 +111,7 @@ pip install -r requirements.txt
 ## Betriebsprofil (sicher)
 
 - Immer zuerst mit --dry-run testen
-- Confidence-Schwelle setzen (z. B. 0.75)
+- Confidence-Schwelle setzen (z. B. 0.85)
 - Unterhalb Schwelle in Review-Ordner statt Auto-Rename
 - Alle Umbenennungen protokollieren (CSV/JSON)
 - Produktivlauf nachts einplanen, um andere VMs nicht zu stoeren
@@ -176,14 +181,14 @@ python3 organize.py \
   --input /srv/docs/inbox \
   --apply \
   --model qwen2.5:7b-instruct \
-  --ollama-timeout 900 \
-  --ollama-retries 2 \
+  --ollama-timeout 1800 \
+  --ollama-retries 0 \
   --ollama-keep-alive 24h \
   --process-nice 5 \
   --max-cpu-threads 2 \
   --ollama-num-thread 2 \
   --sleep-between-files 0.4 \
-  --min-confidence 0.75 \
+  --min-confidence 0.85 \
   --max-text-chars 8000 \
   --sorted-dir _sorted \
   --review-dir _review \
@@ -247,8 +252,13 @@ Option:
 Verhalten:
 
 1. Wenn das LLM keine Kundennummer liefert, durchsucht das Script den Text nach Labels/Patterns.
-2. Treffer werden als `customer_number` uebernommen (z. B. Kundennummer, Vertragsnummer, Konto, IBAN).
+2. Treffer werden priorisiert uebernommen: Kundennummer > Vertragsnummer > Mitgliedsnummer > Beitragsnummer > Konto/Kontonummer > IBAN (als spaeter Fallback).
 3. Ohne Treffer wird kein Platzhalter in den Dateinamen geschrieben.
+
+Datums-Fallback:
+
+- Wenn das LLM kein valides Datum liefert, versucht das Script zuerst ein Datum aus dem Dateinamen zu erkennen (z. B. `2025-10-01` oder `210427`).
+- Erst wenn das nicht moeglich ist, wird das aktuelle Tagesdatum verwendet.
 
 ### Fehlerbild: "[SKIP] ... kein Text extrahiert"
 
@@ -291,8 +301,8 @@ python3 organize.py \
   --input ./inbox \
   --dry-run \
   --model qwen2.5:7b-instruct \
-  --ollama-timeout 900 \
-  --ollama-retries 2 \
+  --ollama-timeout 1800 \
+  --ollama-retries 0 \
   --max-text-chars 8000
 ```
 
@@ -318,8 +328,8 @@ python3 organize.py \
   --input ./inbox \
   --dry-run \
   --model qwen2.5:3b-instruct \
-  --ollama-timeout 900 \
-  --ollama-retries 2 \
+  --ollama-timeout 1800 \
+  --ollama-retries 0 \
   --max-text-chars 6000 \
   --process-nice 8 \
   --max-cpu-threads 2 \
@@ -337,9 +347,8 @@ Wenn der Host trotzdem noch zu stark ausgelastet ist:
 
 Aktuelle Defaults sind CPU-sicher gesetzt:
 
-- `--ollama-timeout 420`
-- `--ollama-timeout 900`
-- `--ollama-retries 2`
+- `--ollama-timeout 1800`
+- `--ollama-retries 0`
 - `--ollama-keep-alive 24h`
 - `--max-text-chars 6000`
 - `--max-cpu-threads 4`

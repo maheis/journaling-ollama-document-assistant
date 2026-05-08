@@ -91,13 +91,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", required=True, help="Input folder with documents")
     parser.add_argument("--model", default="", help="Ollama model name (empty = auto if exactly one model installed)")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434", help="Ollama base URL")
-    parser.add_argument("--ollama-timeout", type=int, default=900, help="Ollama request timeout in seconds")
-    parser.add_argument("--ollama-retries", type=int, default=2, help="Retries on timeout/error")
+    parser.add_argument("--ollama-timeout", type=int, default=1800, help="Ollama request timeout in seconds")
+    parser.add_argument("--ollama-retries", type=int, default=0, help="Retries on timeout/error")
     parser.add_argument("--ollama-retry-backoff", type=float, default=1.5, help="Backoff factor between retries")
     parser.add_argument("--ollama-keep-alive", default="24h", help="Keep model loaded in RAM (e.g. 24h, 30m, -1)")
     parser.add_argument("--categories", nargs="+", default=DEFAULT_CATEGORIES, help="Allowed categories")
     parser.add_argument("--lang", default="deu", help="OCR language for Tesseract")
-    parser.add_argument("--min-confidence", type=float, default=0.75, help="Confidence threshold for auto-sort")
+    parser.add_argument("--min-confidence", type=float, default=0.85, help="Confidence threshold for auto-sort")
     parser.add_argument("--max-text-chars", type=int, default=6000, help="Max chars sent to the model")
     parser.add_argument("--sorted-dir", default="_sorted", help="Folder for categorized files (relative to input)")
     parser.add_argument("--review-dir", default="_review", help="Folder for low-confidence files (relative to input)")
@@ -141,10 +141,10 @@ def slugify(text: str, uppercase: bool = False) -> str:
     return text.upper() if uppercase else text.lower()
 
 
-def ensure_date(date_text: Optional[str]) -> str:
-    if not date_text:
-        return datetime.now().strftime("%Y-%m-%d")
+def _parse_date_from_text(date_text: str) -> Optional[str]:
     date_text = date_text.strip()
+    if not date_text:
+        return None
 
     patterns = [
         (r"^(\d{4})-(\d{2})-(\d{2})$", "%Y-%m-%d"),
@@ -157,7 +157,49 @@ def ensure_date(date_text: Optional[str]) -> str:
             try:
                 return datetime.strptime(date_text, fmt).strftime("%Y-%m-%d")
             except ValueError:
-                pass
+                return None
+    return None
+
+
+def _extract_date_from_filename(source_name: str) -> Optional[str]:
+    name = Path(source_name).stem
+
+    # 2025-10-01 or 2025_10_01
+    m = re.search(r"\b(\d{4})[-_.](\d{2})[-_.](\d{2})\b", name)
+    if m:
+        return _parse_date_from_text(f"{m.group(1)}-{m.group(2)}-{m.group(3)}")
+
+    # 30.09.2025
+    m = re.search(r"\b(\d{2})\.(\d{2})\.(\d{4})\b", name)
+    if m:
+        return _parse_date_from_text(f"{m.group(1)}.{m.group(2)}.{m.group(3)}")
+
+    # 210427 => 2021-04-27 (common in scans/export names)
+    m = re.search(r"\b(\d{2})(\d{2})(\d{2})\b", name)
+    if m:
+        yy = int(m.group(1))
+        mm = int(m.group(2))
+        dd = int(m.group(3))
+        current_yy = int(datetime.now().strftime("%y"))
+        century = 2000 if yy <= current_yy else 1900
+        try:
+            return datetime(century + yy, mm, dd).strftime("%Y-%m-%d")
+        except ValueError:
+            return None
+
+    return None
+
+
+def ensure_date(date_text: Optional[str], source_name: str = "") -> str:
+    if date_text:
+        parsed = _parse_date_from_text(str(date_text))
+        if parsed:
+            return parsed
+
+    if source_name:
+        from_name = _extract_date_from_filename(source_name)
+        if from_name:
+            return from_name
 
     return datetime.now().strftime("%Y-%m-%d")
 
@@ -485,6 +527,17 @@ def normalize_customer_number(value: Optional[str]) -> Optional[str]:
     if v.lower() in {"null", "none", "n/a", "na", "keine", "ohne", "unknown"}:
         return None
     v = re.sub(r"\s+", " ", v)
+
+    # Remove common trailing tokens that are not part of the reference itself.
+    v = re.sub(r"\b(bic|blz)\b.*$", "", v, flags=re.IGNORECASE).strip(" .,:;_-")
+
+    # Compact IBAN-like values to avoid very long spaced forms in file names.
+    compact = v.replace(" ", "")
+    if re.match(r"^[A-Za-z]{2}[0-9]{2}[A-Za-z0-9]{8,30}$", compact):
+        v = compact.upper()
+
+    if len(v) < 3:
+        return None
     return v
 
 
@@ -495,7 +548,47 @@ def extract_customer_number_from_hints(text: str, hints: dict[str, list[str]]) -
     # Normalize whitespace to keep regex matching predictable.
     norm_text = re.sub(r"[\t\r ]+", " ", text)
 
-    for pattern in hints.get("patterns", []):
+    labels = [str(v).strip().lower() for v in hints.get("labels", []) if str(v).strip()]
+    seen_labels: set[str] = set()
+    labels = [l for l in labels if not (l in seen_labels or seen_labels.add(l))]
+
+    priority_labels = [
+        "kundennummer",
+        "vertragsnummer",
+        "mitgliedsnummer",
+        "beitragsnummer",
+        "vorgangsnummer",
+        "aktenzeichen",
+        "kontonummer",
+        "konto",
+        "mandatsreferenz",
+        "referenznummer",
+        "referenz",
+        "ref",
+        "iban",
+    ]
+    priority_rank = {label: i for i, label in enumerate(priority_labels)}
+    labels.sort(key=lambda l: priority_rank.get(l, 9999))
+
+    for label in labels:
+        label_pattern = re.escape(label)
+        m = re.search(
+            rf"{label_pattern}\s*[:#\-]?\s*([A-Za-z0-9][A-Za-z0-9\-./ ]{{1,40}})",
+            norm_text,
+            flags=re.IGNORECASE,
+        )
+        if not m:
+            continue
+        candidate = m.group(1).strip()
+        normalized = normalize_customer_number(candidate)
+        if normalized:
+            return normalized
+
+    patterns = [str(p) for p in hints.get("patterns", []) if str(p).strip()]
+    # Prefer non-IBAN patterns first; IBAN works as a late fallback.
+    patterns.sort(key=lambda p: ("iban" in p.lower(),))
+
+    for pattern in patterns:
         try:
             m = re.search(pattern, norm_text, flags=re.IGNORECASE)
         except re.error:
@@ -503,23 +596,6 @@ def extract_customer_number_from_hints(text: str, hints: dict[str, list[str]]) -
         if not m:
             continue
         candidate = m.group(1) if m.groups() else m.group(0)
-        normalized = normalize_customer_number(candidate)
-        if normalized:
-            return normalized
-
-    for label in hints.get("labels", []):
-        if not label:
-            continue
-        label_pattern = re.escape(label)
-        m = re.search(
-            rf"{label_pattern}\s*[:#\-]?\s*([A-Za-z0-9][A-Za-z0-9\-./ ]{{2,40}})",
-            norm_text,
-            flags=re.IGNORECASE,
-        )
-        if not m:
-            continue
-        candidate = m.group(1).strip()
-        candidate = re.split(r"\s{2,}|\n", candidate)[0].strip()
         normalized = normalize_customer_number(candidate)
         if normalized:
             return normalized
@@ -699,7 +775,7 @@ def plan_target_path(
     review_root: Path,
     min_confidence: float,
 ) -> Path:
-    date_part = ensure_date(classification.date)
+    date_part = ensure_date(classification.date, src.name)
     sender_part = slugify(classification.sender)
     category_part = slugify(classification.category, uppercase=True)
     customer_number_part = slugify(classification.customer_number) if classification.customer_number else ""
@@ -931,7 +1007,7 @@ def main() -> int:
                     "category": cls.category,
                     "customer_number": cls.customer_number,
                     "title": cls.title,
-                    "date": ensure_date(cls.date),
+                    "date": ensure_date(cls.date, src.name),
                     "confidence": cls.confidence,
                     "review": in_review,
                     "ocr_pdf_rebuild": should_rebuild_ocr_pdf,
