@@ -190,6 +190,7 @@ python3 organize.py \
   --sleep-between-files 0.4 \
   --min-confidence 0.85 \
   --max-text-chars 8000 \
+  --field-aliases-file field_aliases.json \
   --sorted-dir _sorted \
   --review-dir _review \
   --log-file doc-organize.jsonl
@@ -210,6 +211,51 @@ Hinweise:
 - Das LLM bleibt per Default im RAM: `--ollama-keep-alive 24h`
 - Optionale Kategorie-Schlagworte aus `category_hints.json` werden verwendet
 - Bei unsicheren Faellen (`confidence` niedrig oder `SONSTIGES`) kann ein Keyword-Fallback die Kategorie korrigieren
+
+### Web-Review vor finalem Umbenennen (Deploy)
+
+Ziel:
+
+- Vorschlaege zuerst in einer Weboberflaeche pruefen und anpassen
+- Dateien erst auf Knopfdruck deployen (dann werden sie wirklich verschoben/umbenannt)
+- Dokumente direkt aus der Tabelle oeffnen
+- Nicht deployte Eintraege bleiben sichtbar, bis sie deployt sind
+
+Dateien:
+
+- `review_web.py`: lokale Weboberflaeche
+- `review_state.json`: speichert offene/deployte Eintraege
+- `field_aliases.json`: gespeicherte Lernregeln fuer spaetere Laeufe
+
+1) Erst Vorschlaege erzeugen (Dry-Run):
+
+```bash
+python3 organize.py --input ./inbox --dry-run --model qwen2.5:7b-instruct
+```
+
+2) Weboberflaeche starten:
+
+```bash
+python3 review_web.py --host 127.0.0.1 --port 8765
+```
+
+3) Im Browser oeffnen:
+
+- `http://127.0.0.1:8765`
+
+Funktionen in der UI:
+
+1. Eintraege in Spalten bearbeiten: Sender, Kategorie, Kunden-Nr, Titel, Datum
+2. Dokument pro Zeile direkt oeffnen
+3. Aenderungen speichern ohne Deploy
+4. Deploy ausfuehren (erst dann werden Dateien verschoben)
+5. Pro Feld Lern-Haken setzen (z. B. `adac_autoversicherung_ag` -> `ADAC`)
+
+Lernen fuer zukuenftige Dokumente:
+
+- Gelerntes wird in `field_aliases.json` gespeichert.
+- `organize.py` nutzt diese Regeln automatisch bei neuen Laeufen.
+- Beispiel: Wenn Sender einmal von `adac_autoversicherung_ag` auf `ADAC` gelernt wurde, wird das in Zukunft direkt angewendet.
 
 ### Kategorie-Schlagworte (optional, empfohlen)
 

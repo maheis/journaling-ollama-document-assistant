@@ -1,0 +1,893 @@
+#!/usr/bin/env python3
+"""Review and deploy document rename suggestions from organize.py logs.
+
+Workflow:
+1) Run organize.py in dry-run mode.
+2) Start this web app and review/edit suggestions.
+3) Click Deploy to apply file moves/renames.
+
+The app persists:
+- pending/deployed state in review_state.json
+- learned aliases in field_aliases.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import mimetypes
+import re
+import shutil
+import threading
+import unicodedata
+from dataclasses import dataclass
+from datetime import datetime
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any, Optional
+from urllib.parse import parse_qs, urlparse
+
+
+DEFAULT_CATEGORIES = [
+    "RECHNUNG",
+    "VERTRAG",
+    "VERSICHERUNG",
+    "BANK",
+    "STEUER",
+    "GESUNDHEIT",
+    "KINDERGARTEN",
+    "SCHULE",
+    "ELTERNGELD",
+    "KINDERGELD",
+    "GEHALT",
+    "VEREIN",
+    "AUTO",
+    "URLAUB",
+    "HAUSNEBENKOSTEN",
+    "SONSTIGES",
+]
+
+
+def strip_to_ascii(text: str) -> str:
+    text = text.replace("\u00e4", "ae").replace("\u00f6", "oe").replace("\u00fc", "ue")
+    text = text.replace("\u00c4", "Ae").replace("\u00d6", "Oe").replace("\u00dc", "Ue")
+    text = text.replace("\u00df", "ss")
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    return text
+
+
+def slugify(text: str, uppercase: bool = False) -> str:
+    text = strip_to_ascii(text)
+    text = text.strip()
+    text = re.sub(r"[^A-Za-z0-9]+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("_")
+    if not text:
+        text = "unbekannt"
+    return text.upper() if uppercase else text.lower()
+
+
+def ensure_date(date_text: Optional[str], source_name: str = "") -> str:
+    date_text = (date_text or "").strip()
+
+    def parse_direct(value: str) -> Optional[str]:
+        patterns = [
+            (r"^(\d{4})-(\d{2})-(\d{2})$", "%Y-%m-%d"),
+            (r"^(\d{2})\.(\d{2})\.(\d{4})$", "%d.%m.%Y"),
+            (r"^(\d{2})/(\d{2})/(\d{4})$", "%d/%m/%Y"),
+        ]
+        for pattern, fmt in patterns:
+            if re.match(pattern, value):
+                try:
+                    return datetime.strptime(value, fmt).strftime("%Y-%m-%d")
+                except ValueError:
+                    return None
+        return None
+
+    parsed = parse_direct(date_text) if date_text else None
+    if parsed:
+        return parsed
+
+    stem = Path(source_name).stem
+
+    m = re.search(r"\b(\d{4})[-_.](\d{2})[-_.](\d{2})\b", stem)
+    if m:
+        parsed = parse_direct(f"{m.group(1)}-{m.group(2)}-{m.group(3)}")
+        if parsed:
+            return parsed
+
+    m = re.search(r"\b(\d{2})\.(\d{2})\.(\d{4})\b", stem)
+    if m:
+        parsed = parse_direct(f"{m.group(1)}.{m.group(2)}.{m.group(3)}")
+        if parsed:
+            return parsed
+
+    m = re.search(r"\b(\d{2})(\d{2})(\d{2})\b", stem)
+    if m:
+        yy = int(m.group(1))
+        mm = int(m.group(2))
+        dd = int(m.group(3))
+        current_yy = int(datetime.now().strftime("%y"))
+        century = 2000 if yy <= current_yy else 1900
+        try:
+            return datetime(century + yy, mm, dd).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def unique_path(target: Path) -> Path:
+    if not target.exists():
+        return target
+    stem = target.stem
+    suffix = target.suffix
+    parent = target.parent
+    i = 1
+    while True:
+        candidate = parent / f"{stem}_{i}{suffix}"
+        if not candidate.exists():
+            return candidate
+        i += 1
+
+
+def entry_id_for_event(event: dict[str, Any]) -> str:
+    base = f"{event.get('timestamp','')}|{event.get('source','')}|{event.get('target','')}"
+    return hashlib.sha1(base.encode("utf-8", errors="ignore")).hexdigest()[:16]
+
+
+@dataclass
+class Paths:
+    log_file: Path
+    state_file: Path
+    aliases_file: Path
+
+
+class ReviewStore:
+    def __init__(self, paths: Paths, categories: list[str]) -> None:
+        self.paths = paths
+        self.categories = categories
+        self.lock = threading.Lock()
+        self.state = self._load_state()
+        self.aliases = self._load_aliases()
+        self._sync_from_log()
+
+    def _load_json_file(self, path: Path, default: Any) -> Any:
+        if not path.exists():
+            return default
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return default
+
+    def _write_json_file(self, path: Path, payload: Any) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _load_state(self) -> dict[str, Any]:
+        state = self._load_json_file(
+            self.paths.state_file,
+            {
+                "entries": {},
+                "value_memory": {
+                    "sender": [],
+                    "category": [],
+                    "customer_number": [],
+                    "title": [],
+                },
+            },
+        )
+        if not isinstance(state, dict):
+            state = {}
+        state.setdefault("entries", {})
+        state.setdefault("value_memory", {})
+        for key in ("sender", "category", "customer_number", "title"):
+            values = state["value_memory"].get(key, [])
+            if not isinstance(values, list):
+                values = []
+            state["value_memory"][key] = [str(v) for v in values if str(v).strip()]
+        return state
+
+    def _load_aliases(self) -> dict[str, dict[str, str]]:
+        aliases = self._load_json_file(
+            self.paths.aliases_file,
+            {"sender": {}, "category": {}, "customer_number": {}, "title": {}},
+        )
+        if not isinstance(aliases, dict):
+            aliases = {}
+        normalized: dict[str, dict[str, str]] = {}
+        for key in ("sender", "category", "customer_number", "title"):
+            raw = aliases.get(key, {})
+            if not isinstance(raw, dict):
+                raw = {}
+            normalized[key] = {str(k): str(v) for k, v in raw.items() if str(k).strip() and str(v).strip()}
+        return normalized
+
+    def _sync_from_log(self) -> None:
+        if not self.paths.log_file.exists():
+            return
+
+        entries = self.state["entries"]
+        try:
+            lines = self.paths.log_file.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except Exception:
+                continue
+
+            if event.get("status") != "ok":
+                continue
+            if not event.get("source") or not event.get("target"):
+                continue
+
+            item_id = entry_id_for_event(event)
+            if item_id in entries:
+                continue
+
+            default_fields = {
+                "sender": str(event.get("sender", "")).strip(),
+                "category": str(event.get("category", "SONSTIGES")).strip().upper() or "SONSTIGES",
+                "customer_number": str(event.get("customer_number", "")).strip(),
+                "title": str(event.get("title", "")).strip(),
+                "date": str(event.get("date", "")).strip(),
+            }
+            if default_fields["category"] not in self.categories:
+                default_fields["category"] = "SONSTIGES"
+
+            entries[item_id] = {
+                "id": item_id,
+                "status": "pending",
+                "source": str(event.get("source")),
+                "target": str(event.get("target")),
+                "default": default_fields,
+                "edited": dict(default_fields),
+                "confidence": float(event.get("confidence", 0.0) or 0.0),
+                "review": bool(event.get("review", False)),
+                "created_at": str(event.get("timestamp", "")),
+                "deployed_at": "",
+                "deployed_target": "",
+            }
+
+        self._save_state()
+
+    def _save_state(self) -> None:
+        self._write_json_file(self.paths.state_file, self.state)
+
+    def _save_aliases(self) -> None:
+        self._write_json_file(self.paths.aliases_file, self.aliases)
+
+    def _remember_values(self, fields: dict[str, str]) -> None:
+        memory = self.state["value_memory"]
+        for key in ("sender", "category", "customer_number", "title"):
+            value = str(fields.get(key, "")).strip()
+            if not value:
+                continue
+            values = memory.get(key, [])
+            if value not in values:
+                values.append(value)
+            memory[key] = values[-500:]
+
+    def _infer_roots(self, entry: dict[str, Any]) -> tuple[Path, Path]:
+        src = Path(entry["source"]).resolve()
+        original_target = Path(entry["target"]).resolve()
+
+        if entry.get("review"):
+            review_root = original_target.parent
+            if "_review" in review_root.parts:
+                idx = review_root.parts.index("_review")
+                sorted_root = Path(*review_root.parts[:idx]) / "_sorted"
+            else:
+                sorted_root = src.parent / "_sorted"
+            return sorted_root, review_root
+
+        parent = original_target.parent
+        if re.match(r"^\d{4}$", parent.name):
+            sorted_root = parent.parent
+        else:
+            sorted_root = parent
+
+        review_root = sorted_root.parent / "_review"
+        return sorted_root, review_root
+
+    def _build_target(self, entry: dict[str, Any]) -> Path:
+        fields = entry["edited"]
+        src = Path(entry["source"]).resolve()
+        sorted_root, review_root = self._infer_roots(entry)
+
+        date_part = ensure_date(fields.get("date", ""), src.name)
+        sender_part = slugify(fields.get("sender", ""))
+        category_part = slugify(fields.get("category", "SONSTIGES"), uppercase=True)
+        customer = fields.get("customer_number", "").strip()
+        title_part = slugify(fields.get("title", ""))
+        ext = src.suffix.lower()
+
+        parts = [date_part, sender_part, category_part]
+        if customer:
+            parts.append(slugify(customer))
+        parts.append(title_part)
+        name = "_".join(parts) + ext
+
+        if entry.get("review"):
+            base_target = review_root / name
+        else:
+            base_target = sorted_root / date_part[:4] / name
+
+        return unique_path(base_target)
+
+    def list_entries(self) -> dict[str, Any]:
+        with self.lock:
+            self._sync_from_log()
+            rows: list[dict[str, Any]] = []
+            for entry in self.state["entries"].values():
+                if entry.get("status") != "pending":
+                    continue
+                source = Path(entry.get("source", ""))
+                row = {
+                    "id": entry["id"],
+                    "status": entry.get("status", "pending"),
+                    "source": str(source),
+                    "source_name": source.name,
+                    "source_exists": source.exists(),
+                    "confidence": float(entry.get("confidence", 0.0) or 0.0),
+                    "review": bool(entry.get("review", False)),
+                    "target_preview": str(self._build_target(entry)),
+                    "default": entry.get("default", {}),
+                    "edited": entry.get("edited", {}),
+                }
+                rows.append(row)
+
+            rows.sort(key=lambda r: r["source_name"].lower())
+            return {
+                "rows": rows,
+                "categories": self.categories,
+                "value_memory": self.state.get("value_memory", {}),
+                "aliases": self.aliases,
+                "log_file": str(self.paths.log_file),
+                "state_file": str(self.paths.state_file),
+                "aliases_file": str(self.paths.aliases_file),
+            }
+
+    def save_edits(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        with self.lock:
+            updated = 0
+            entries = self.state["entries"]
+            for row in rows:
+                item_id = str(row.get("id", "")).strip()
+                if item_id not in entries:
+                    continue
+                entry = entries[item_id]
+                if entry.get("status") != "pending":
+                    continue
+
+                edited = entry.get("edited", {}).copy()
+                incoming = row.get("edited", {}) if isinstance(row.get("edited", {}), dict) else {}
+
+                for field in ("sender", "category", "customer_number", "title", "date"):
+                    value = str(incoming.get(field, "")).strip()
+                    if field == "category":
+                        value = value.upper() if value else "SONSTIGES"
+                        if value not in self.categories:
+                            value = "SONSTIGES"
+                    edited[field] = value
+
+                entry["edited"] = edited
+                self._remember_values(edited)
+                updated += 1
+
+            self._save_state()
+            return {"updated": updated}
+
+    def _learn_aliases(self, entry: dict[str, Any], learn_fields: dict[str, bool]) -> int:
+        count = 0
+        default = entry.get("default", {})
+        edited = entry.get("edited", {})
+
+        for field in ("sender", "category", "customer_number", "title"):
+            if not bool(learn_fields.get(field, False)):
+                continue
+            src_value = str(default.get(field, "")).strip()
+            dst_value = str(edited.get(field, "")).strip()
+            if not src_value or not dst_value or src_value == dst_value:
+                continue
+
+            key = slugify(src_value)
+            self.aliases.setdefault(field, {})[key] = dst_value
+            count += 1
+
+        return count
+
+    def deploy(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+        with self.lock:
+            applied = 0
+            missing = 0
+            learned = 0
+            errors: list[str] = []
+
+            entries = self.state["entries"]
+            for row in rows:
+                item_id = str(row.get("id", "")).strip()
+                if item_id not in entries:
+                    continue
+                entry = entries[item_id]
+                if entry.get("status") != "pending":
+                    continue
+
+                incoming = row.get("edited", {}) if isinstance(row.get("edited", {}), dict) else {}
+                learn_fields = row.get("learn", {}) if isinstance(row.get("learn", {}), dict) else {}
+
+                for field in ("sender", "category", "customer_number", "title", "date"):
+                    value = str(incoming.get(field, "")).strip()
+                    if field == "category":
+                        value = value.upper() if value else "SONSTIGES"
+                        if value not in self.categories:
+                            value = "SONSTIGES"
+                    entry["edited"][field] = value
+
+                self._remember_values(entry["edited"])
+                learned += self._learn_aliases(entry, learn_fields)
+
+                src = Path(entry["source"])
+                if not src.exists():
+                    entry["status"] = "missing"
+                    missing += 1
+                    continue
+
+                try:
+                    target = self._build_target(entry)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(src), str(target))
+                    entry["status"] = "deployed"
+                    entry["deployed_at"] = datetime.now().isoformat(timespec="seconds")
+                    entry["deployed_target"] = str(target)
+                    applied += 1
+                except Exception as exc:
+                    errors.append(f"{src.name}: {exc}")
+
+            self._save_state()
+            self._save_aliases()
+            return {
+                "applied": applied,
+                "missing": missing,
+                "learned_aliases": learned,
+                "errors": errors,
+            }
+
+    def file_path_for_id(self, item_id: str) -> Optional[Path]:
+        with self.lock:
+            entry = self.state["entries"].get(item_id)
+            if not entry:
+                return None
+            candidate = Path(entry.get("source", ""))
+            if candidate.exists() and candidate.is_file():
+                return candidate
+            deployed = Path(entry.get("deployed_target", ""))
+            if deployed.exists() and deployed.is_file():
+                return deployed
+            return None
+
+
+HTML_PAGE = """<!doctype html>
+<html lang=\"de\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>Document Review Deploy</title>
+  <style>
+    :root {
+      --bg: #f5f4ef;
+      --card: #fffdf6;
+      --ink: #1d1f24;
+      --muted: #6d727d;
+      --accent: #0f766e;
+      --accent-2: #b45309;
+      --line: #dfdccf;
+      --ok: #166534;
+      --warn: #92400e;
+      --err: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at top right, #ebe7d6 0%, var(--bg) 40%), var(--bg);
+    }
+    .wrap { max-width: 1400px; margin: 0 auto; padding: 18px; }
+    .top {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 8px 30px rgba(30, 24, 10, 0.06);
+      position: sticky;
+      top: 8px;
+      z-index: 2;
+    }
+    h1 { margin: 0 0 10px 0; font-size: 22px; letter-spacing: 0.2px; }
+    .meta { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    button {
+      border: 1px solid var(--line);
+      background: white;
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 9px 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+    button.secondary { background: #fff7ed; border-color: #fed7aa; color: #7c2d12; }
+    .status { margin-top: 10px; font-size: 14px; }
+    .grid {
+      margin-top: 14px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: auto;
+      max-height: calc(100vh - 190px);
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 1300px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; background: #f7f3e6; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+    tr:hover td { background: #fffcf1; }
+    input, select {
+      width: 100%;
+      border: 1px solid #d4cfbd;
+      border-radius: 8px;
+      padding: 7px 8px;
+      font-size: 13px;
+      background: white;
+    }
+    .mini { font-size: 12px; color: var(--muted); }
+    .pill {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #fff;
+    }
+    .review { color: var(--warn); border-color: #facc15; }
+    .sorted { color: var(--ok); border-color: #86efac; }
+    .missing { color: var(--err); border-color: #fecaca; }
+    a.filelink { color: #0e7490; text-decoration: none; }
+    a.filelink:hover { text-decoration: underline; }
+    .learn { display: flex; gap: 8px; font-size: 12px; color: var(--muted); }
+    .learn label { display: inline-flex; align-items: center; gap: 4px; }
+  </style>
+</head>
+<body>
+  <div class=\"wrap\">
+    <div class=\"top\">
+      <h1>Review vor Deploy</h1>
+      <div class=\"meta\" id=\"meta\"></div>
+      <div class=\"actions\">
+        <button onclick=\"reloadData()\">Neu laden</button>
+        <button class=\"secondary\" onclick=\"saveEdits()\">Aenderungen speichern</button>
+        <button class=\"primary\" onclick=\"deployAll()\">Deploy ausfuehren</button>
+      </div>
+      <div class=\"status\" id=\"status\"></div>
+    </div>
+
+    <div class=\"grid\">
+      <table>
+        <thead>
+          <tr>
+            <th>Datei</th>
+            <th>Conf</th>
+            <th>Sender</th>
+            <th>Kategorie</th>
+            <th>Kunden-Nr</th>
+            <th>Titel</th>
+            <th>Datum</th>
+            <th>Zielvorschau</th>
+            <th>Lernen</th>
+          </tr>
+        </thead>
+        <tbody id=\"rows\"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+let DATA = { rows: [], categories: [], value_memory: {} };
+
+function esc(v) {
+  return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+}
+
+function status(text, cls = '') {
+  const el = document.getElementById('status');
+  el.textContent = text;
+  el.className = 'status ' + cls;
+}
+
+function optionsFor(field) {
+  const values = DATA.value_memory?.[field] || [];
+  return values.map(v => `<option value=\"${esc(v)}\"></option>`).join('');
+}
+
+function categoryOptions(selected) {
+  return DATA.categories.map(c => `<option ${c === selected ? 'selected' : ''} value=\"${esc(c)}\">${esc(c)}</option>`).join('');
+}
+
+function rowMarkup(row) {
+  const badge = row.review
+    ? '<span class="pill review">REVIEW</span>'
+    : '<span class="pill sorted">SORTED</span>';
+  const missing = row.source_exists ? '' : '<div><span class="pill missing">DATEI FEHLT</span></div>';
+
+  return `<tr data-id=\"${esc(row.id)}\">
+    <td>
+      <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
+      <div class=\"mini\">${esc(row.source)}</div>
+      <div>${badge}</div>
+      ${missing}
+    </td>
+    <td>${Number(row.confidence || 0).toFixed(2)}</td>
+    <td>
+      <input list=\"sender-mem\" name=\"sender\" value=\"${esc(row.edited.sender || '')}\" />
+      <div class=\"mini\">LLM: ${esc(row.default.sender || '')}</div>
+    </td>
+    <td>
+      <select name=\"category\">${categoryOptions(row.edited.category || 'SONSTIGES')}</select>
+      <div class=\"mini\">LLM: ${esc(row.default.category || '')}</div>
+    </td>
+    <td>
+      <input list=\"customer_number-mem\" name=\"customer_number\" value=\"${esc(row.edited.customer_number || '')}\" />
+      <div class=\"mini\">LLM: ${esc(row.default.customer_number || '')}</div>
+    </td>
+    <td>
+      <input list=\"title-mem\" name=\"title\" value=\"${esc(row.edited.title || '')}\" />
+      <div class=\"mini\">LLM: ${esc(row.default.title || '')}</div>
+    </td>
+    <td>
+      <input name=\"date\" value=\"${esc(row.edited.date || '')}\" placeholder=\"YYYY-MM-DD\" />
+      <div class=\"mini\">LLM: ${esc(row.default.date || '')}</div>
+    </td>
+    <td class=\"mini\">${esc(row.target_preview || '')}</td>
+    <td>
+      <div class=\"learn\">
+        <label><input type=\"checkbox\" name=\"learn_sender\" /> Sender</label>
+        <label><input type=\"checkbox\" name=\"learn_category\" /> Kategorie</label>
+        <label><input type=\"checkbox\" name=\"learn_customer_number\" /> Kunden-Nr</label>
+        <label><input type=\"checkbox\" name=\"learn_title\" /> Titel</label>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function collectRows() {
+  const trs = [...document.querySelectorAll('#rows tr')];
+  return trs.map(tr => ({
+    id: tr.dataset.id,
+    edited: {
+      sender: tr.querySelector('[name="sender"]').value,
+      category: tr.querySelector('[name="category"]').value,
+      customer_number: tr.querySelector('[name="customer_number"]').value,
+      title: tr.querySelector('[name="title"]').value,
+      date: tr.querySelector('[name="date"]').value,
+    },
+    learn: {
+      sender: tr.querySelector('[name="learn_sender"]').checked,
+      category: tr.querySelector('[name="learn_category"]').checked,
+      customer_number: tr.querySelector('[name="learn_customer_number"]').checked,
+      title: tr.querySelector('[name="learn_title"]').checked,
+    }
+  }));
+}
+
+async function reloadData() {
+  status('Lade Daten...');
+  const res = await fetch('/api/pending');
+  const payload = await res.json();
+  DATA = payload;
+
+  document.getElementById('meta').textContent = `Log: ${payload.log_file} | State: ${payload.state_file} | Aliases: ${payload.aliases_file} | Offene Eintraege: ${payload.rows.length}`;
+
+  document.getElementById('rows').innerHTML = payload.rows.map(rowMarkup).join('');
+  const dlSender = `<datalist id=\"sender-mem\">${optionsFor('sender')}</datalist>`;
+  const dlCustomer = `<datalist id=\"customer_number-mem\">${optionsFor('customer_number')}</datalist>`;
+  const dlTitle = `<datalist id=\"title-mem\">${optionsFor('title')}</datalist>`;
+
+  document.querySelectorAll('datalist').forEach(n => n.remove());
+  document.body.insertAdjacentHTML('beforeend', dlSender + dlCustomer + dlTitle);
+  status(`Bereit. ${payload.rows.length} offene Eintraege.`);
+}
+
+async function saveEdits() {
+  const rows = collectRows();
+  const res = await fetch('/api/save-edits', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows })
+  });
+  const payload = await res.json();
+  status(`Gespeichert: ${payload.updated}`);
+  await reloadData();
+}
+
+async function deployAll() {
+  const rows = collectRows();
+  if (!rows.length) {
+    status('Keine offenen Eintraege.');
+    return;
+  }
+  status('Deploy laeuft...');
+  const res = await fetch('/api/deploy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows })
+  });
+  const payload = await res.json();
+  const msg = `Deploy fertig: moved=${payload.applied}, missing=${payload.missing}, gelernt=${payload.learned_aliases}, errors=${(payload.errors || []).length}`;
+  status(msg);
+  await reloadData();
+}
+
+reloadData();
+</script>
+</body>
+</html>
+"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    store: ReviewStore
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        return
+
+    def _json_response(self, payload: Any, status: int = 200) -> None:
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _text_response(self, payload: str, status: int = 200, content_type: str = "text/html; charset=utf-8") -> None:
+        raw = payload.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _read_json(self) -> dict[str, Any]:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        data = self.rfile.read(length) if length > 0 else b"{}"
+        try:
+            payload = json.loads(data.decode("utf-8"))
+            return payload if isinstance(payload, dict) else {}
+        except Exception:
+            return {}
+
+    def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+
+        if parsed.path == "/":
+            self._text_response(HTML_PAGE)
+            return
+
+        if parsed.path == "/api/pending":
+            self._json_response(self.store.list_entries())
+            return
+
+        if parsed.path == "/file":
+            params = parse_qs(parsed.query)
+            item_id = (params.get("id") or [""])[0]
+            path = self.store.file_path_for_id(item_id)
+            if path is None:
+                self._text_response("Not found", status=404, content_type="text/plain; charset=utf-8")
+                return
+
+            try:
+                data = path.read_bytes()
+            except Exception:
+                self._text_response("Read error", status=500, content_type="text/plain; charset=utf-8")
+                return
+
+            content_type, _ = mimetypes.guess_type(str(path))
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", content_type or "application/octet-stream")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Content-Disposition", f"inline; filename={path.name}")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
+        self._text_response("Not found", status=404, content_type="text/plain; charset=utf-8")
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        payload = self._read_json()
+
+        if parsed.path == "/api/save-edits":
+            rows = payload.get("rows", []) if isinstance(payload.get("rows"), list) else []
+            self._json_response(self.store.save_edits(rows))
+            return
+
+        if parsed.path == "/api/deploy":
+            rows = payload.get("rows", []) if isinstance(payload.get("rows"), list) else []
+            self._json_response(self.store.deploy(rows))
+            return
+
+        self._text_response("Not found", status=404, content_type="text/plain; charset=utf-8")
+
+
+def find_latest_log_file(explicit: str) -> Path:
+    if explicit.strip():
+        p = Path(explicit).expanduser()
+        if p.exists():
+            return p.resolve()
+        raise FileNotFoundError(f"Log file not found: {p}")
+
+    candidates = sorted(Path("/tmp").glob("*_organize_log.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not candidates:
+        raise FileNotFoundError("No /tmp/*_organize_log.jsonl file found. Run organize.py --dry-run first.")
+    return candidates[0].resolve()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Review and deploy organize.py suggestions")
+    parser.add_argument("--log-file", default="", help="Path to JSONL log file (default: latest /tmp/*_organize_log.jsonl)")
+    parser.add_argument("--state-file", default="review_state.json", help="State file path")
+    parser.add_argument("--field-aliases-file", default="field_aliases.json", help="Aliases file shared with organize.py")
+    parser.add_argument("--categories", nargs="+", default=DEFAULT_CATEGORIES, help="Allowed categories")
+    parser.add_argument("--host", default="127.0.0.1", help="Bind host")
+    parser.add_argument("--port", type=int, default=8765, help="Bind port")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    base_dir = Path(__file__).resolve().parent
+
+    log_file = find_latest_log_file(args.log_file)
+
+    state_file = Path(args.state_file).expanduser()
+    if not state_file.is_absolute():
+        state_file = base_dir / state_file
+
+    aliases_file = Path(args.field_aliases_file).expanduser()
+    if not aliases_file.is_absolute():
+        aliases_file = base_dir / aliases_file
+
+    categories = [str(c).strip().upper() for c in args.categories if str(c).strip()]
+    if "SONSTIGES" not in categories:
+        categories.append("SONSTIGES")
+
+    store = ReviewStore(Paths(log_file=log_file, state_file=state_file, aliases_file=aliases_file), categories=categories)
+
+    Handler.store = store
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    print(f"Review app listening on http://{args.host}:{args.port}")
+    print(f"Log file: {log_file}")
+    print(f"State file: {state_file}")
+    print(f"Aliases file: {aliases_file}")
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

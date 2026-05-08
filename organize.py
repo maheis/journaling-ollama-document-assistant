@@ -106,6 +106,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--category-hints-file", default="category_hints.json", help="JSON file with keywords per category")
     parser.add_argument("--keyword-fallback-min-score", type=int, default=2, help="Minimum keyword matches to apply keyword fallback")
     parser.add_argument("--customer-number-hints-file", default="customer_number_hints.json", help="JSON file with labels/patterns for customer/reference number extraction")
+    parser.add_argument("--field-aliases-file", default="field_aliases.json", help="JSON file with learned aliases for sender/category/customer_number/title")
     parser.add_argument("--ocr-max-pages", type=int, default=3, help="Max pages to OCR when PDF has little text")
     parser.add_argument("--process-nice", type=int, default=5, help="Increase niceness to lower CPU priority")
     parser.add_argument("--max-cpu-threads", type=int, default=4, help="Limit CPU threads for OCR/BLAS libs (0 disables)")
@@ -518,6 +519,62 @@ def load_customer_number_hints(hints_path: Path) -> dict[str, list[str]]:
     return {"labels": labels, "patterns": patterns}
 
 
+def load_field_aliases(aliases_path: Path) -> dict[str, dict[str, str]]:
+    if not aliases_path.exists():
+        return {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
+
+    try:
+        raw = json.loads(aliases_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
+
+    if not isinstance(raw, dict):
+        return {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
+
+    result: dict[str, dict[str, str]] = {}
+    for field in ("sender", "category", "customer_number", "title"):
+        values = raw.get(field, {})
+        if not isinstance(values, dict):
+            values = {}
+        normalized: dict[str, str] = {}
+        for k, v in values.items():
+            key = slugify(str(k))
+            value = str(v).strip()
+            if key and value:
+                normalized[key] = value
+        result[field] = normalized
+
+    return result
+
+
+def apply_field_aliases(
+    classification: Classification,
+    aliases: dict[str, dict[str, str]],
+    categories: list[str],
+) -> Classification:
+    sender_alias = aliases.get("sender", {}).get(slugify(classification.sender))
+    if sender_alias:
+        classification.sender = sender_alias
+
+    category_alias = aliases.get("category", {}).get(slugify(classification.category))
+    if category_alias:
+        mapped_category = str(category_alias).strip().upper()
+        if mapped_category in categories:
+            classification.category = mapped_category
+
+    customer_number_value = (classification.customer_number or "").strip()
+    if customer_number_value:
+        customer_alias = aliases.get("customer_number", {}).get(slugify(customer_number_value))
+        if customer_alias:
+            classification.customer_number = normalize_customer_number(customer_alias)
+
+    title_alias = aliases.get("title", {}).get(slugify(classification.title))
+    if title_alias:
+        classification.title = title_alias
+
+    return classification
+
+
 def normalize_customer_number(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
@@ -869,6 +926,11 @@ def main() -> int:
         customer_number_hints_path = base_dir / customer_number_hints_path
     customer_number_hints = load_customer_number_hints(customer_number_hints_path)
 
+    field_aliases_path = Path(args.field_aliases_file).expanduser()
+    if not field_aliases_path.is_absolute():
+        field_aliases_path = base_dir / field_aliases_path
+    field_aliases = load_field_aliases(field_aliases_path)
+
     files = list(iter_input_files(input_dir, args.sorted_dir, args.review_dir))
     if not files:
         emit("[INFO] Keine verarbeitbaren Dateien gefunden.", run_log_path)
@@ -898,6 +960,15 @@ def main() -> int:
     emit(
         f"[INFO] customer_number_hints: {customer_number_hints_path} "
         f"(labels={len(customer_number_hints.get('labels', []))}, patterns={len(customer_number_hints.get('patterns', []))})",
+        run_log_path,
+    )
+    emit(
+        "[INFO] field_aliases: "
+        f"{field_aliases_path} "
+        f"(sender={len(field_aliases.get('sender', {}))}, "
+        f"category={len(field_aliases.get('category', {}))}, "
+        f"customer_number={len(field_aliases.get('customer_number', {}))}, "
+        f"title={len(field_aliases.get('title', {}))})",
         run_log_path,
     )
     emit(
@@ -966,6 +1037,8 @@ def main() -> int:
                 if extracted_customer_number:
                     cls.customer_number = extracted_customer_number
                     customer_number_from_hints = True
+
+            cls = apply_field_aliases(cls, field_aliases, categories)
 
             target = plan_target_path(
                 src=src,
