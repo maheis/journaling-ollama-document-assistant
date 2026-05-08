@@ -211,6 +211,35 @@ Hinweise:
 - Optionale Kategorie-Schlagworte aus `category_hints.json` werden verwendet
 - Bei unsicheren Faellen (`confidence` niedrig oder `SONSTIGES`) kann ein Keyword-Fallback die Kategorie korrigieren
 
+## Zentrale Konfiguration
+
+Es gibt jetzt eine zentrale Datei fuer Defaults:
+
+- `assistant_config.json`
+
+Sie steuert u. a.:
+
+- Port/Host der Weboberflaeche
+- Login/Passwortdatei
+- Scan-Intervall des Dienstes
+- Modell/Inbox fuer den Auto-Dry-Run
+
+Beispiel starten mit Config-Datei:
+
+```bash
+python3 review_web.py --config-file ./assistant_config.json
+python3 doc_assistant_service.py --config-file ./assistant_config.json
+```
+
+Prioritaet der Werte:
+
+- CLI-Flag > `assistant_config.json` > Script-Default
+
+Validierung:
+
+- `review_web.py` und `doc_assistant_service.py` validieren die Config beim Start.
+- Bei JSON- oder Schema-Fehlern wird mit klarer Fehlermeldung abgebrochen (Exit-Code 2).
+
 ### Web-Review vor finalem Umbenennen (Deploy)
 
 Ziel:
@@ -266,12 +295,7 @@ Manuell starten:
 
 ```bash
 python3 doc_assistant_service.py \
-  --input ./inbox \
-  --model qwen2.5:7b-instruct \
-  --host 127.0.0.1 \
-  --port 8765 \
-  --auth-password-file ./.review_web_password \
-  --interval-seconds 300
+  --config-file ./assistant_config.json
 ```
 
 Wichtige Parameter:
@@ -293,6 +317,19 @@ systemctl --user daemon-reload
 systemctl --user enable --now ollama-document-assistant.service
 systemctl --user status ollama-document-assistant.service
 ```
+
+## Installation per Script
+
+Automatisches Setup (venv, deps, inbox, password, systemd-user-unit):
+
+```bash
+bash ./install.sh
+```
+
+Optionen:
+
+- `--no-systemd`: keine Unit installieren
+- `--no-start`: Unit installieren, aber nicht sofort starten
 
 Funktionen in der UI:
 

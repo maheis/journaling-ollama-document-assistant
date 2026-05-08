@@ -33,6 +33,8 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
+from assistant_config import get_section, load_config, pick, validate_config
+
 
 DEFAULT_CATEGORIES = [
     "RECHNUNG",
@@ -1193,21 +1195,23 @@ def find_latest_log_file(explicit: str) -> Path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Review and deploy organize.py suggestions")
-    parser.add_argument("--log-file", default="", help="Path to JSONL log file (default: latest /tmp/*_organize_log.jsonl)")
-    parser.add_argument("--state-file", default="review_state.json", help="State file path")
-    parser.add_argument("--field-aliases-file", default="field_aliases.json", help="Aliases file shared with organize.py")
-    parser.add_argument("--auth-password", default="", help="Login password for web UI/API")
-    parser.add_argument("--auth-password-file", default="", help="File containing login password (first line)")
-    parser.add_argument("--session-ttl-seconds", type=int, default=28800, help="Session lifetime in seconds")
-    parser.add_argument("--categories", nargs="+", default=DEFAULT_CATEGORIES, help="Allowed categories")
-    parser.add_argument("--host", default="127.0.0.1", help="Bind host")
-    parser.add_argument("--port", type=int, default=8765, help="Bind port")
+    parser.add_argument("--config-file", default="assistant_config.json", help="Path to shared JSON config file")
+    parser.add_argument("--log-file", default=None, help="Path to JSONL log file (default: latest /tmp/*_organize_log.jsonl)")
+    parser.add_argument("--state-file", default=None, help="State file path")
+    parser.add_argument("--field-aliases-file", default=None, help="Aliases file shared with organize.py")
+    parser.add_argument("--auth-password", default=None, help="Login password for web UI/API")
+    parser.add_argument("--auth-password-file", default=None, help="File containing login password (first line)")
+    parser.add_argument("--session-ttl-seconds", type=int, default=None, help="Session lifetime in seconds")
+    parser.add_argument("--categories", nargs="+", default=None, help="Allowed categories")
+    parser.add_argument("--host", default=None, help="Bind host")
+    parser.add_argument("--port", type=int, default=None, help="Bind port")
     return parser.parse_args()
 
 
 def resolve_auth_password(args: argparse.Namespace, base_dir: Path) -> str:
-    if args.auth_password_file.strip():
-        p = Path(args.auth_password_file).expanduser()
+    auth_password_file = (args.auth_password_file or "").strip()
+    if auth_password_file:
+        p = Path(auth_password_file).expanduser()
         if not p.is_absolute():
             p = base_dir / p
         if p.exists():
@@ -1215,8 +1219,9 @@ def resolve_auth_password(args: argparse.Namespace, base_dir: Path) -> str:
                 return p.read_text(encoding="utf-8").splitlines()[0].strip()
             except Exception:
                 return ""
-    if args.auth_password.strip():
-        return args.auth_password.strip()
+    auth_password = (args.auth_password or "").strip()
+    if auth_password:
+        return auth_password
     return os.environ.get("REVIEW_WEB_PASSWORD", "").strip()
 
 
@@ -1224,24 +1229,64 @@ def main() -> int:
     args = parse_args()
     base_dir = Path(__file__).resolve().parent
 
-    log_file = find_latest_log_file(args.log_file)
+    cfg = load_config(args.config_file, base_dir)
+    if cfg.errors:
+        for err in cfg.errors:
+            print(f"[ERROR] {err}")
+        return 2
 
-    state_file = Path(args.state_file).expanduser()
+    config = cfg.data
+    validation_errors = validate_config(config)
+    if validation_errors:
+        for err in validation_errors:
+            print(f"[ERROR] Invalid config: {err}")
+        return 2
+
+    section = get_section(config, "review_web")
+
+    log_file_arg = str(pick(args.log_file, section, "log_file", "")).strip()
+    state_file_arg = str(pick(args.state_file, section, "state_file", "review_state.json")).strip()
+    aliases_file_arg = str(pick(args.field_aliases_file, section, "field_aliases_file", "field_aliases.json")).strip()
+    session_ttl_seconds = int(pick(args.session_ttl_seconds, section, "session_ttl_seconds", 28800))
+    host = str(pick(args.host, section, "host", "127.0.0.1")).strip()
+    port = int(pick(args.port, section, "port", 8765))
+
+    categories_raw = pick(args.categories, section, "categories", DEFAULT_CATEGORIES)
+    if not isinstance(categories_raw, list):
+        categories_raw = DEFAULT_CATEGORIES
+
+    log_file = find_latest_log_file(log_file_arg)
+
+    state_file = Path(state_file_arg).expanduser()
     if not state_file.is_absolute():
         state_file = base_dir / state_file
 
-    aliases_file = Path(args.field_aliases_file).expanduser()
+    aliases_file = Path(aliases_file_arg).expanduser()
     if not aliases_file.is_absolute():
         aliases_file = base_dir / aliases_file
 
-    categories = [str(c).strip().upper() for c in args.categories if str(c).strip()]
+    categories = [str(c).strip().upper() for c in categories_raw if str(c).strip()]
     if "SONSTIGES" not in categories:
         categories.append("SONSTIGES")
 
     auth_password = resolve_auth_password(args, base_dir)
-    auth = PasswordAuth(auth_password, args.session_ttl_seconds)
+    if not auth_password:
+        auth_password = str(section.get("auth_password", "")).strip() or os.environ.get("REVIEW_WEB_PASSWORD", "").strip()
 
-    if not auth.enabled and args.host not in {"127.0.0.1", "localhost", "::1"}:
+    auth_password_file_cfg = str(section.get("auth_password_file", "")).strip()
+    if not auth_password and auth_password_file_cfg:
+        p = Path(auth_password_file_cfg).expanduser()
+        if not p.is_absolute():
+            p = base_dir / p
+        if p.exists():
+            try:
+                auth_password = p.read_text(encoding="utf-8").splitlines()[0].strip()
+            except Exception:
+                auth_password = ""
+
+    auth = PasswordAuth(auth_password, session_ttl_seconds)
+
+    if not auth.enabled and host not in {"127.0.0.1", "localhost", "::1"}:
         print("[ERROR] Remote bind without login is blocked. Set --auth-password or --auth-password-file.")
         return 2
 
@@ -1249,8 +1294,8 @@ def main() -> int:
 
     Handler.store = store
     Handler.auth = auth
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"Review app listening on http://{args.host}:{args.port}")
+    server = ThreadingHTTPServer((host, port), Handler)
+    print(f"Review app listening on http://{host}:{port}")
     print(f"Log file: {log_file}")
     print(f"State file: {state_file}")
     print(f"Aliases file: {aliases_file}")

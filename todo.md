@@ -26,5 +26,5 @@
 [x] es soll immer dry-run erfolgen und finales umbenennen dann immer über die webseite.
 [x] dienst der automatisch die inbox triggert und die webseite hostet.
 [x] webseite muss gehärtet werden, ein login sollte aus ausreichend sein.
-[ ] config-file für alle defaults, port, login etc.
-[ ] install skript um alles einzurichten.
+[x] config-file für alle defaults, port, login etc.
+[x] install skript um alles einzurichten.

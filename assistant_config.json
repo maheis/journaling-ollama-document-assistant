@@ -1,0 +1,27 @@
+{
+    "review_web": {
+        "host": "127.0.0.1",
+        "port": 8765,
+        "state_file": "review_state.json",
+        "field_aliases_file": "field_aliases.json",
+        "auth_password_file": ".review_web_password",
+        "session_ttl_seconds": 28800
+    },
+    "service": {
+        "input": "./inbox",
+        "model": "qwen2.5:7b-instruct",
+        "interval_seconds": 300,
+        "host": "127.0.0.1",
+        "port": 8765,
+        "state_file": "review_state.json",
+        "field_aliases_file": "field_aliases.json",
+        "auth_password_file": ".review_web_password",
+        "session_ttl_seconds": 28800,
+        "organize_extra_args": [
+            "--ollama-timeout",
+            "1800",
+            "--ollama-retries",
+            "0"
+        ]
+    }
+}

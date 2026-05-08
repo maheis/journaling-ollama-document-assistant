@@ -19,6 +19,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from assistant_config import get_section, load_config, pick, validate_config
+
 
 def ts() -> str:
     return datetime.now().isoformat(timespec="seconds")
@@ -30,22 +32,23 @@ def emit(message: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run review web UI and periodic organize dry-runs")
-    parser.add_argument("--input", required=True, help="Inbox directory for organize.py")
-    parser.add_argument("--model", default="", help="Ollama model for organize.py (optional)")
-    parser.add_argument("--interval-seconds", type=int, default=300, help="Seconds between dry-run scans")
-    parser.add_argument("--host", default="127.0.0.1", help="Host for review_web.py")
-    parser.add_argument("--port", type=int, default=8765, help="Port for review_web.py")
-    parser.add_argument("--state-file", default="review_state.json", help="State file for review_web.py")
-    parser.add_argument("--field-aliases-file", default="field_aliases.json", help="Shared alias file")
-    parser.add_argument("--auth-password", default="", help="Login password for review_web.py")
-    parser.add_argument("--auth-password-file", default="", help="Password file for review_web.py")
-    parser.add_argument("--session-ttl-seconds", type=int, default=28800, help="Session lifetime for review_web.py")
-    parser.add_argument("--python", default=sys.executable, help="Python executable")
-    parser.add_argument("--project-dir", default="", help="Project directory (default: script location)")
+    parser.add_argument("--config-file", default="assistant_config.json", help="Path to shared JSON config file")
+    parser.add_argument("--input", default=None, help="Inbox directory for organize.py")
+    parser.add_argument("--model", default=None, help="Ollama model for organize.py (optional)")
+    parser.add_argument("--interval-seconds", type=int, default=None, help="Seconds between dry-run scans")
+    parser.add_argument("--host", default=None, help="Host for review_web.py")
+    parser.add_argument("--port", type=int, default=None, help="Port for review_web.py")
+    parser.add_argument("--state-file", default=None, help="State file for review_web.py")
+    parser.add_argument("--field-aliases-file", default=None, help="Shared alias file")
+    parser.add_argument("--auth-password", default=None, help="Login password for review_web.py")
+    parser.add_argument("--auth-password-file", default=None, help="Password file for review_web.py")
+    parser.add_argument("--session-ttl-seconds", type=int, default=None, help="Session lifetime for review_web.py")
+    parser.add_argument("--python", default=None, help="Python executable")
+    parser.add_argument("--project-dir", default=None, help="Project directory (default: script location)")
     parser.add_argument(
         "--organize-extra-arg",
         action="append",
-        default=[],
+        default=None,
         help="Extra argument for organize.py (repeatable, e.g. --organize-extra-arg=--ollama-timeout --organize-extra-arg=1800)",
     )
     return parser.parse_args()
@@ -118,11 +121,47 @@ def terminate_process(proc: Optional[subprocess.Popen[bytes]], name: str) -> Non
 def main() -> int:
     args = parse_args()
 
+    default_project_dir = Path(__file__).resolve().parent
+    cfg = load_config(args.config_file, default_project_dir)
+    if cfg.errors:
+        for err in cfg.errors:
+            emit(f"[ERROR] {err}")
+        return 2
+
+    config = cfg.data
+    validation_errors = validate_config(config)
+    if validation_errors:
+        for err in validation_errors:
+            emit(f"[ERROR] Invalid config: {err}")
+        return 2
+
+    section = get_section(config, "service")
+
+    args.input = str(pick(args.input, section, "input", "")).strip()
+    args.model = str(pick(args.model, section, "model", "")).strip()
+    args.interval_seconds = int(pick(args.interval_seconds, section, "interval_seconds", 300))
+    args.host = str(pick(args.host, section, "host", "127.0.0.1")).strip()
+    args.port = int(pick(args.port, section, "port", 8765))
+    args.state_file = str(pick(args.state_file, section, "state_file", "review_state.json")).strip()
+    args.field_aliases_file = str(pick(args.field_aliases_file, section, "field_aliases_file", "field_aliases.json")).strip()
+    args.auth_password = str(pick(args.auth_password, section, "auth_password", "")).strip()
+    args.auth_password_file = str(pick(args.auth_password_file, section, "auth_password_file", "")).strip()
+    args.session_ttl_seconds = int(pick(args.session_ttl_seconds, section, "session_ttl_seconds", 28800))
+    args.python = str(pick(args.python, section, "python", sys.executable)).strip()
+    args.project_dir = str(pick(args.project_dir, section, "project_dir", "")).strip()
+    if args.organize_extra_arg is None:
+        cfg_extra = section.get("organize_extra_args", [])
+        args.organize_extra_arg = [str(v) for v in cfg_extra] if isinstance(cfg_extra, list) else []
+
+    if not args.input:
+        emit("[ERROR] Missing input folder. Set --input or service.input in assistant_config.json")
+        return 2
+
     if args.interval_seconds < 30:
         emit("interval-seconds too low; using minimum of 30")
         args.interval_seconds = 30
 
-    project_dir = Path(args.project_dir).expanduser().resolve() if args.project_dir else Path(__file__).resolve().parent
+    project_dir = Path(args.project_dir).expanduser().resolve() if args.project_dir else default_project_dir
     if not (project_dir / "organize.py").exists() or not (project_dir / "review_web.py").exists():
         emit(f"[ERROR] project-dir invalid: {project_dir}")
         return 2
