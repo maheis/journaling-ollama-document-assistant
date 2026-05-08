@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_INSTALL_DIR="$HOME/.local/share/ollama-document-assistant"
+PROJECT_DIR="$DEFAULT_INSTALL_DIR"
 VENV_DIR="$PROJECT_DIR/.venv"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 INSTALL_SYSTEMD=1
@@ -22,6 +24,7 @@ Options:
   --install-ollama     Install Ollama and try to start/enable service
   --pull-models        Pull model(s) in Ollama (default: qwen2.5:7b-instruct)
   --model <name>       Model name to pull (repeatable by comma: m1,m2)
+  --install-dir <dir>  Installation directory (default: ~/.local/share/ollama-document-assistant)
   --no-systemd         Do not install user systemd unit
   --no-start           Install unit but do not start/restart it
   --help               Show this help
@@ -48,6 +51,54 @@ run_as_root() {
 
 cmd_exists() {
   command -v "$1" >/dev/null 2>&1
+}
+
+sync_project_files() {
+  mkdir -p "$PROJECT_DIR/systemd"
+
+  local files=(
+    organize.py
+    review_web.py
+    doc_assistant_service.py
+    assistant_config.py
+    requirements.txt
+    install.sh
+    LICENSE
+    README.md
+    category_hints.json
+    customer_number_hints.json
+  )
+
+  local rel=""
+  for rel in "${files[@]}"; do
+    if [[ -f "$SOURCE_DIR/$rel" ]]; then
+      cp "$SOURCE_DIR/$rel" "$PROJECT_DIR/$rel"
+    fi
+  done
+
+  if [[ -f "$SOURCE_DIR/systemd/ollama-document-assistant.service" ]]; then
+    cp "$SOURCE_DIR/systemd/ollama-document-assistant.service" "$PROJECT_DIR/systemd/ollama-document-assistant.service"
+  fi
+}
+
+write_user_service_unit() {
+  local unit_path="$HOME/.config/systemd/user/ollama-document-assistant.service"
+  cat > "$unit_path" <<EOF
+[Unit]
+Description=Ollama Document Assistant (dry-run scanner + review web)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$PROJECT_DIR
+ExecStart=$PROJECT_DIR/.venv/bin/python $PROJECT_DIR/doc_assistant_service.py --config-file $PROJECT_DIR/assistant_config.json
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
 }
 
 set_or_generate_web_password() {
@@ -184,6 +235,14 @@ while [[ $# -gt 0 ]]; do
       fi
       MODEL_OVERRIDE="$1"
       ;;
+    --install-dir)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "[ERROR] --install-dir requires a value" >&2
+        exit 2
+      fi
+      PROJECT_DIR="$1"
+      ;;
     --no-systemd)
       INSTALL_SYSTEMD=0
       ;;
@@ -198,11 +257,27 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+PROJECT_DIR="${PROJECT_DIR/#\~/$HOME}"
+if [[ "$PROJECT_DIR" != /* ]]; then
+  PROJECT_DIR="$PWD/$PROJECT_DIR"
+fi
+if [[ "$PROJECT_DIR" == *" "* ]]; then
+  echo "[ERROR] Install path must not contain spaces for systemd ExecStart compatibility: $PROJECT_DIR" >&2
+  exit 2
+fi
+mkdir -p "$PROJECT_DIR"
+PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+VENV_DIR="$PROJECT_DIR/.venv"
+
 echo "[0/7] Preflight"
 if ! cmd_exists "$PYTHON_BIN"; then
   echo "[ERROR] Python interpreter not found: $PYTHON_BIN" >&2
   exit 2
 fi
+echo "Install dir: $PROJECT_DIR"
+
+echo "[prep] Syncing project files to install dir"
+sync_project_files
 
 if [[ "$INSTALL_SYSTEM_DEPS" -eq 1 ]]; then
   if ! cmd_exists apt-get; then
@@ -292,7 +367,7 @@ echo "[7/7] Basic sanity checks"
 echo "[post] Installing systemd user unit (optional)"
 if [[ "$INSTALL_SYSTEMD" -eq 1 ]]; then
   mkdir -p "$HOME/.config/systemd/user"
-  cp "$PROJECT_DIR/systemd/ollama-document-assistant.service" "$HOME/.config/systemd/user/ollama-document-assistant.service"
+  write_user_service_unit
   systemctl --user daemon-reload
   systemctl --user enable ollama-document-assistant.service
 

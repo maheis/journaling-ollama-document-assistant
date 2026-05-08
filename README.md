@@ -38,7 +38,7 @@ http://127.0.0.1:8449
 5) Passwort auslesen
 
 ```bash
-head -n 1 ./.review_web_password
+head -n 1 ~/.local/share/ollama-document-assistant/.review_web_password
 ```
 
 ## Was das Projekt macht
@@ -110,6 +110,12 @@ Basis-Setup (venv, Python-Dependencies, Inbox, Passwortdatei, optionale user-sys
 bash ./install.sh
 ```
 
+Standard-Installationspfad:
+
+```text
+~/.local/share/ollama-document-assistant
+```
+
 Vollsetup fuer Debian:
 
 ```bash
@@ -125,6 +131,7 @@ Optionen:
 - `--install-ollama`: Ollama installieren und starten
 - `--pull-models`: Modell(e) mit `ollama pull` laden
 - `--model <name>`: Modell explizit setzen (mehrere per Komma)
+- `--install-dir <pfad>`: Installationspfad ueberschreiben
 
 Hinweise:
 

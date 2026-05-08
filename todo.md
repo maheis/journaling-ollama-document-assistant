@@ -31,5 +31,5 @@
 [x] inbox pfad konfigurierbar
 [x] ausgabepfad konfigurierbar
 [ ] log und jasonl sinnvoll verkaspern (persistieren auch über reboot hinaus)
-[ ] sinnvoller installationspfad
+[x] sinnvoller installationspfad
 [ ] installation über wget/curl (install.sh ziehen und dann abfahrt mit dem rest inkl. checkout.) 
