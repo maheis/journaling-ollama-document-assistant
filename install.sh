@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_REF="${BASH_SOURCE[0]-$0}"
+if [[ "$SCRIPT_REF" == "-" || "$SCRIPT_REF" == "bash" ]]; then
+  SOURCE_DIR="$PWD"
+else
+  SOURCE_DIR="$(cd "$(dirname "$SCRIPT_REF")" && pwd)"
+fi
 INSTALL_SCRIPT_PATH=""
-if [[ -f "${BASH_SOURCE[0]}" ]]; then
+if [[ -n "${BASH_SOURCE[0]-}" && -f "${BASH_SOURCE[0]}" ]]; then
   INSTALL_SCRIPT_PATH="$SOURCE_DIR/$(basename "${BASH_SOURCE[0]}")"
+elif [[ -f "$0" ]]; then
+  INSTALL_SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 fi
 DEFAULT_INSTALL_DIR="$HOME/.local/share/ollama-document-assistant"
 PROJECT_DIR="$DEFAULT_INSTALL_DIR"
