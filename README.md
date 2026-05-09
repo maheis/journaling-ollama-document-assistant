@@ -152,6 +152,43 @@ Hinweise:
 - kein `git clone`/Checkout im Skript
 - fuer apt-Schritte sind root/sudo Rechte noetig
 
+## Deinstallation
+
+Mit Skript (empfohlen):
+
+```bash
+bash ./uninstall.sh
+```
+
+Optional (zusaetzlich Modell und Ollama entfernen):
+
+```bash
+bash ./uninstall.sh --remove-models --remove-ollama
+```
+
+Manuell deinstallieren:
+
+```bash
+# 1) Service stoppen/entfernen
+systemctl --user stop ollama-document-assistant.service
+systemctl --user disable ollama-document-assistant.service
+rm -f ~/.config/systemd/user/ollama-document-assistant.service
+systemctl --user daemon-reload
+systemctl --user reset-failed
+
+# 2) Installationsverzeichnis entfernen
+rm -rf ~/.local/share/ollama-document-assistant
+
+# 3) Optional: Modell entfernen
+ollama rm qwen2.5:7b-instruct
+
+# 4) Optional: Ollama selbst entfernen (Debian/Ubuntu)
+sudo systemctl stop ollama
+sudo systemctl disable ollama
+sudo apt-get remove -y ollama
+sudo apt-get autoremove -y
+```
+
 ## Web-Review und Deploy
 
 Start (manuell):

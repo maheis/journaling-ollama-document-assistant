@@ -33,3 +33,5 @@
 [x] log und jasonl sinnvoll verkaspern (persistieren auch über reboot hinaus)
 [x] sinnvoller installationspfad
 [x] installation über wget/curl (install.sh ziehen und dann abfahrt mit dem rest inkl. checkout.)
+[x] uninstall
+[ ] install.sh soll sich danach löschen, wenn sie nicht im repo liegt.

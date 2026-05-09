@@ -126,6 +126,7 @@ sync_project_files() {
     assistant_config.py
     requirements.txt
     install.sh
+    uninstall.sh
     LICENSE
     README.md
     category_hints.json
