@@ -21,6 +21,7 @@ import mimetypes
 import os
 import re
 import secrets
+import signal
 import shutil
 import subprocess
 import sys
@@ -662,6 +663,7 @@ HTML_PAGE = """<!doctype html>
         }
         button.primary { background: var(--accent); border-color: var(--accent); color: #071a18; }
         button.secondary { background: #2a1f1a; border-color: #5a3a2a; color: #f7b955; }
+        button.danger { background: #2a1717; border-color: #7a2a2a; color: #ff9b9b; }
         button:disabled { opacity: 0.55; cursor: not-allowed; }
         .status { margin-top: 10px; font-size: 14px; }
         .grid {
@@ -730,7 +732,8 @@ HTML_PAGE = """<!doctype html>
             <div class="activity idle" id="activity-indicator">Systemstatus: Leerlauf</div>
             <div class=\"actions\">
                 <button onclick=\"reloadData()\">Neu laden</button>
-                <button onclick=\"triggerScan()\">Scan jetzt starten</button>
+                <button id=\"trigger-scan-btn\" onclick=\"triggerScan()\">Scan jetzt starten</button>
+                <button id=\"stop-scan-btn\" class=\"danger\" onclick=\"stopScan()\" disabled>Überprüfung stoppen</button>
                 <button class=\"secondary\" onclick=\"saveEdits()\">Änderungen speichern</button>
                 <button class=\"primary\" onclick=\"deployAll()\">Ausführung starten</button>
                 <button onclick=\"window.location.href='/config'\">Konfiguration</button>
@@ -794,6 +797,15 @@ function setActivityIndicator(payload) {
     const label = busy ? 'Dokumentprüfung läuft' : 'Leerlauf';
     el.textContent = `Systemstatus: ${label}`;
     el.className = 'activity ' + (busy ? 'busy' : 'idle');
+
+    const triggerBtn = document.getElementById('trigger-scan-btn');
+    const stopBtn = document.getElementById('stop-scan-btn');
+    if (triggerBtn) {
+        triggerBtn.disabled = busy;
+    }
+    if (stopBtn) {
+        stopBtn.disabled = !busy;
+    }
 }
 
 function optionsFor(field) {
@@ -985,6 +997,29 @@ async function triggerScan() {
 
     status('Scan gestartet. Ergebnis erscheint nach Abschluss im Status.', 'ok');
     setTimeout(reloadData, 2000);
+}
+
+async function stopScan() {
+    status('Stoppe laufende Überprüfung...');
+    const res = await fetch('/api/scan-stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    });
+    const payload = await res.json();
+
+    if (!res.ok || payload.ok === false) {
+        const details = payload.details ? ` (${payload.details})` : '';
+        status((payload.error || payload.message || 'Stop fehlgeschlagen.') + details, 'err');
+        return;
+    }
+
+    if (payload.stopped) {
+        status(payload.message || 'Überprüfung wurde gestoppt.', 'ok');
+    } else {
+        status(payload.message || 'Keine laufende Überprüfung gefunden.', 'warn');
+    }
+    await refreshScanStatus();
 }
 
 async function saveEdits() {
@@ -1910,6 +1945,104 @@ class Handler(BaseHTTPRequestHandler):
                 return True
         return False
 
+    def _find_external_organize_pids(self) -> list[int]:
+        config, load_errors = self._load_runtime_config()
+        if load_errors:
+            return []
+
+        project_dir = self._resolve_project_dir(config)
+        organize_path = str((project_dir / "organize.py").resolve())
+        try:
+            proc = subprocess.run(
+                ["ps", "-eo", "pid=,args="],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except Exception:
+            return []
+
+        if proc.returncode != 0:
+            return []
+
+        current_pid = os.getpid()
+        pids: list[int] = []
+        for line in proc.stdout.splitlines():
+            match = re.match(r"\s*(\d+)\s+(.*)", line)
+            if not match:
+                continue
+            pid = int(match.group(1))
+            args = match.group(2)
+            if pid == current_pid:
+                continue
+            if "organize.py" not in args:
+                continue
+            if organize_path in args:
+                pids.append(pid)
+        return pids
+
+    def _stop_scan_process(self) -> dict[str, Any]:
+        manual_pid: Optional[int] = None
+        manual_stopped = False
+        with self.scan_lock:
+            proc = self.scan_proc
+            if proc is not None:
+                rc = proc.poll()
+                if rc is None:
+                    manual_pid = proc.pid
+                    try:
+                        proc.terminate()
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=5)
+                    except Exception as exc:
+                        return {"ok": False, "stopped": False, "error": "manual_stop_failed", "details": str(exc)}
+                    self.scan_last_exit_code = proc.returncode if proc.returncode is not None else -signal.SIGTERM
+                    self.scan_last_finished_at = time.time()
+                    self.scan_proc = None
+                    manual_stopped = True
+                else:
+                    self.scan_last_exit_code = rc
+                    self.scan_last_finished_at = time.time()
+                    self.scan_proc = None
+
+        external_pids = self._find_external_organize_pids()
+        external_stopped: list[int] = []
+        for pid in external_pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                external_stopped.append(pid)
+            except ProcessLookupError:
+                continue
+            except PermissionError:
+                return {
+                    "ok": False,
+                    "stopped": manual_stopped,
+                    "error": "permission_denied",
+                    "details": f"Keine Berechtigung zum Stoppen von PID {pid}",
+                }
+            except Exception as exc:
+                return {"ok": False, "stopped": manual_stopped, "error": "external_stop_failed", "details": str(exc)}
+
+        if manual_stopped or external_stopped:
+            message = "Überprüfung wurde gestoppt"
+            payload: dict[str, Any] = {
+                "ok": True,
+                "stopped": True,
+                "message": message,
+                "manual_stopped": manual_stopped,
+                "external_stopped": len(external_stopped),
+            }
+            if manual_pid is not None:
+                payload["manual_pid"] = manual_pid
+            if external_stopped:
+                payload["external_pids"] = external_stopped
+            return payload
+
+        return {"ok": True, "stopped": False, "message": "Keine laufende Überprüfung gefunden"}
+
     def _scan_status_payload(self) -> dict[str, Any]:
         manual_running = False
         with self.scan_lock:
@@ -1932,6 +2065,7 @@ class Handler(BaseHTTPRequestHandler):
 
         payload = {
             "running": manual_running,
+            "external_running": external_running,
             "last_exit_code": self.scan_last_exit_code,
             "last_finished_at": self.scan_last_finished_at,
             "activity_running": activity_running,
@@ -2116,6 +2250,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.scan_proc = proc
 
             self._json_response({"ok": True, "running": False, "pid": proc.pid})
+            return
+
+        if parsed.path == "/api/scan-stop":
+            result = self._stop_scan_process()
+            self._json_response(result, status=200 if result.get("ok") else 500)
             return
 
         if parsed.path == "/api/update":
