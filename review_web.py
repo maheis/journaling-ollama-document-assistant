@@ -844,43 +844,60 @@ function rowMarkup(row) {
     const statusLabel = uiStatusLabel(row.status);
     const deployDisabled = row.status === 'deployed' ? 'disabled' : '';
 
-    return `<tr data-id=\"${esc(row.id)}\">
-        <td class=\"col-file\">
-            <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
-            <div class=\"mini\">${esc(row.source_preview || row.source)}</div>
+    return `<tr data-id="${esc(row.id)}">
+        <td class="col-file">
+            <a class="filelink" target="_blank" href="/file?id=${encodeURIComponent(row.id)}">${esc(row.source_name)}</a>
+            <div class="mini">${esc(row.source_preview || row.source)}</div>
             <div>${badge}</div>
             ${missing}
         </td>
-        <td><span class=\"pill ${statusClass}\">${esc(statusLabel)}</span></td>
+        <td><span class="pill ${statusClass}">${esc(statusLabel)}</span></td>
         <td>${Number(row.confidence || 0).toFixed(2)}</td>
         <td>
-            <input list=\"sender-mem\" name=\"sender\" value=\"${esc(row.edited.sender || '')}\" />
-            <div class=\"mini\">LLM: ${esc(row.default.sender || '')}</div>
+            <input list="sender-mem" name="sender" value="${esc(row.edited.sender || '')}" />
+            <div class="mini">LLM: ${esc(row.default.sender || '')}</div>
         </td>
         <td>
-            <select name=\"category\">${categoryOptions(row.edited.category || 'SONSTIGES')}</select>
-            <div class=\"mini\">LLM: ${esc(row.default.category || '')}</div>
+            <select name="category">${categoryOptions(row.edited.category || 'SONSTIGES')}</select>
+            <div class="mini">LLM: ${esc(row.default.category || '')}</div>
         </td>
         <td>
-            <input list=\"customer_number-mem\" name=\"customer_number\" value=\"${esc(row.edited.customer_number || '')}\" />
-            <div class=\"mini\">LLM: ${esc(row.default.customer_number || '')}</div>
+            <input list="customer_number-mem" name="customer_number" value="${esc(row.edited.customer_number || '')}" />
+            <div class="mini">LLM: ${esc(row.default.customer_number || '')}</div>
         </td>
         <td>
-            <input list=\"title-mem\" name=\"title\" value=\"${esc(row.edited.title || '')}\" />
-            <div class=\"mini\">LLM: ${esc(row.default.title || '')}</div>
+            <input list="title-mem" name="title" value="${esc(row.edited.title || '')}" />
+            <div class="mini">LLM: ${esc(row.default.title || '')}</div>
         </td>
         <td>
-            <input name=\"date\" value=\"${esc(row.edited.date || '')}\" placeholder=\"YYYY-MM-DD\" />
-            <div class=\"mini\">LLM: ${esc(row.default.date || '')}</div>
+            <input name="date" value="${esc(row.edited.date || '')}" placeholder="YYYY-MM-DD" />
+            <div class="mini">LLM: ${esc(row.default.date || '')}</div>
         </td>
-        <td class=\"mini\">${esc(row.target_preview || '')}</td>
+        <td class="mini">${esc(row.target_preview || '')}</td>
         <td>
-            <div class=\"learn\">
-                <label><input type=\"checkbox\" name=\"learn_sender\" /> Sender</label>
-                <label><input type=\"checkbox\" name=\"learn_category\" /> Kategorie</label>
-                <label><input type=\"checkbox\" name=\"learn_customer_number\" /> Kunden-Nr</label>
-                <label><input type=\"checkbox\" name=\"learn_title\" /> Titel</label>
+            <div class="row-actions">
+                <button onclick="saveRow('${esc(row.id)}')" ${deployDisabled}>Speichern</button>
+                <button class="primary" onclick="deployRow('${esc(row.id)}')" ${deployDisabled}>Ausführen</button>
+                <button class="danger" onclick="deleteRow('${esc(row.id)}')">Löschen</button>
             </div>
+        </td>
+    </tr>`;
+        async function deleteRow(id) {
+            if (!confirm('Eintrag wirklich löschen?')) return;
+            status('Lösche Eintrag...');
+            const res = await fetch('/api/delete-entry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.ok === false) {
+                status(payload.error || 'Löschen fehlgeschlagen', 'err');
+                return;
+            }
+            status('Eintrag gelöscht.', 'ok');
+            await reloadData();
+        }
         </td>
         <td>
             <div class=\"row-actions\">
@@ -1199,45 +1216,50 @@ CONFIG_PAGE = """<!doctype html>
             <h1>Konfiguration</h1>
             <p class=\"meta\" id=\"meta\"></p>
 
-            <div class=\"section\">
-                <h2>In-/Outbox</h2>
-                <div class=\"grid\">
-                    <div class=\"field wide\">
-                        <label for=\"input\">Inbox (service.input)</label>
-                        <input id=\"input\" placeholder=\"./inbox\" />
-                    </div>
 
-                    <div class=\"field wide\">
-                        <label for=\"output\">Outbox (service.output)</label>
-                        <input id=\"output\" placeholder=\"./output\" />
+            <div class="section">
+                <h2>Ollama</h2>
+                <div class="grid">
+                    <div class="field">
+                        <label for="ollama-timeout">Ollama Timeout Sekunden</label>
+                        <input id="ollama-timeout" type="number" min="1" step="1" placeholder="1800" />
+                    </div>
+                    <div class="field">
+                        <label for="ollama-retries">Ollama Retries</label>
+                        <input id="ollama-retries" type="number" min="0" step="1" placeholder="0" />
+                    </div>
+                    <div class="field">
+                        <label for="max-text-chars">Max. Textzeichen pro Anfrage</label>
+                        <input id="max-text-chars" type="number" min="100" step="100" placeholder="6000" />
+                    </div>
+                    <div class="field">
+                        <label for="process-nice">Process Nice</label>
+                        <input id="process-nice" type="number" min="0" step="1" placeholder="5" />
+                    </div>
+                    <div class="field">
+                        <label for="max-cpu-threads">Max CPU Threads (0 = kein Limit)</label>
+                        <input id="max-cpu-threads" type="number" min="0" step="1" placeholder="4" />
+                    </div>
+                    <div class="field">
+                        <label for="ollama-num-thread">Ollama Num Thread (0 = Default)</label>
+                        <input id="ollama-num-thread" type="number" min="0" step="1" placeholder="4" />
+                    </div>
+                    <div class="field">
+                        <label for="sleep-between-files">Pause zwischen Dateien (Sekunden)</label>
+                        <input id="sleep-between-files" type="number" min="0" step="0.1" placeholder="0.4" />
                     </div>
                 </div>
+                <div class="grid">
+                    <div class="field wide">
+                        <label for="ollama-version-info">Ollama-Version</label>
+                        <input id="ollama-version-info" readonly value="Noch nicht geprüft" />
+                    </div>
+                </div>
+                <div class="actions">
+                    <button onclick="checkOllamaVersion()" type="button">Ollama-Version prüfen</button>
+                    <button id="run-ollama-update-btn" class="primary" onclick="runOllamaUpdate()" type="button" disabled>Ollama Update durchführen</button>
+                </div>
             </div>
-
-            <div class=\"section\">
-                <h2>Ausführungplan</h2>
-                <div class=\"grid stack\">
-                    <div class=\"field\">
-                        <label for=\"model\">Modell (service.model)</label>
-                        <input id=\"model\" placeholder=\"qwen2.5:7b-instruct\" />
-                    </div>
-
-                    <div class=\"field\">
-                        <label for=\"schedule-mode\">Scheduler-Modus (service.schedule_mode)</label>
-                        <select id=\"schedule-mode\">
-                            <option value=\"interval\">interval</option>
-                            <option value=\"inbox-trigger\">inbox-trigger</option>
-                            <option value=\"daily\">daily</option>
-                        </select>
-                    </div>
-
-                    <div class=\"field\">
-                        <label for=\"interval\">Scan-Intervall Sekunden (service.interval_seconds)</label>
-                        <input id=\"interval\" type=\"number\" min=\"30\" step=\"1\" placeholder=\"300\" />
-                    </div>
-
-                    <div class=\"field\">
-                        <label for=\"inbox-poll\">Inbox Poll Sekunden (service.inbox_poll_seconds)</label>
                         <input id=\"inbox-poll\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"2\" />
                     </div>
 
@@ -1359,51 +1381,38 @@ function setUpdateUI(payload) {
     btn.disabled = !payload.available;
 }
 
-async function checkForUpdate() {
-    async function checkOllamaVersion() {
-        const info = byId('ollama-version-info');
-        const btn = byId('run-ollama-update-btn');
-        if (info) info.value = 'Prüfe Ollama-Version...';
-        btn.disabled = true;
-        const res = await fetch('/api/ollama-version');
-        const payload = await res.json();
-        if (!res.ok) {
-            info.value = payload.error || 'Fehler bei Prüfung';
-            return;
-        }
-        info.value = payload.message;
-        btn.disabled = !payload.update_available;
-    }
 
-    async function runOllamaUpdate() {
-        const btn = byId('run-ollama-update-btn');
-        btn.disabled = true;
-        const info = byId('ollama-version-info');
-        info.value = 'Führe Ollama-Update durch...';
-        const res = await fetch('/api/ollama-update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        });
-        const payload = await res.json();
-        if (!res.ok || payload.ok === false) {
-            info.value = payload.message || payload.error || 'Update fehlgeschlagen';
-            return;
-        }
-        info.value = payload.message || 'Ollama wurde aktualisiert.';
-    }
-    const info = byId('update-info');
-    if (info) {
-        info.value = 'Prüfe auf Updates...';
-    }
-    const res = await fetch('/api/update-status');
+async function checkOllamaVersion() {
+    const info = byId('ollama-version-info');
+    const btn = byId('run-ollama-update-btn');
+    if (info) info.value = 'Prüfe Ollama-Version...';
+    btn.disabled = true;
+    const res = await fetch('/api/ollama-version');
     const payload = await res.json();
-    setUpdateUI(payload);
     if (!res.ok) {
-        status(payload.error || payload.message || 'Update-Prüfung fehlgeschlagen.', 'err');
+        info.value = payload.error || 'Fehler bei Prüfung';
         return;
     }
-    status(payload.message || 'Update-Status geprüft.', payload.available ? 'warn' : 'ok');
+    info.value = payload.message;
+    btn.disabled = !payload.update_available;
+}
+
+async function runOllamaUpdate() {
+    const btn = byId('run-ollama-update-btn');
+    btn.disabled = true;
+    const info = byId('ollama-version-info');
+    info.value = 'Führe Ollama-Update durch...';
+    const res = await fetch('/api/ollama-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    });
+    const payload = await res.json();
+    if (!res.ok || payload.ok === false) {
+        info.value = payload.message || payload.error || 'Update fehlgeschlagen';
+        return;
+    }
+    info.value = payload.message || 'Ollama wurde aktualisiert.';
 }
 
 async function runUpdate() {
@@ -1640,6 +1649,17 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _delete_entry(self, entry_id: str) -> dict[str, Any]:
+        with self.store.lock:
+            if entry_id in self.store.state["entries"]:
+                del self.store.state["entries"][entry_id]
+                self.store._save_state()
+                return {"ok": True}
+            return {"ok": False, "error": "Eintrag nicht gefunden"}
+        if parsed.path == "/api/delete-entry":
+            entry_id = str(payload.get("id", "")).strip()
+            self._json_response(self._delete_entry(entry_id))
+            return
 
         # --- OLLAMA VERSION/UPDATE ---
 
