@@ -574,22 +574,24 @@ HTML_PAGE = """<!doctype html>
     <title>Dokumente zur Pruefung</title>
     <style>
         :root {
-            --bg: #f5f4ef;
-            --card: #fffdf6;
-            --ink: #1d1f24;
-            --muted: #6d727d;
-            --accent: #0f766e;
-            --line: #dfdccf;
-            --ok: #166534;
-            --warn: #92400e;
-            --err: #b91c1c;
+            --bg: #0f1117;
+            --bg2: #151926;
+            --card: #1c2233;
+            --ink: #e8edf7;
+            --muted: #9aa6bd;
+            --accent: #23c4a8;
+            --line: #2b3449;
+            --ok: #55d187;
+            --warn: #f7b955;
+            --err: #ff6b6b;
+            --field: #111827;
         }
         * { box-sizing: border-box; }
         body {
             margin: 0;
             font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
             color: var(--ink);
-            background: radial-gradient(circle at top right, #ebe7d6 0%, var(--bg) 40%), var(--bg);
+            background: radial-gradient(circle at top right, #20263a 0%, var(--bg) 42%), var(--bg2);
         }
         .wrap { max-width: 1460px; margin: 0 auto; padding: 18px; }
         .top {
@@ -597,7 +599,7 @@ HTML_PAGE = """<!doctype html>
             border: 1px solid var(--line);
             border-radius: 12px;
             padding: 14px;
-            box-shadow: 0 8px 30px rgba(30, 24, 10, 0.06);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
             position: sticky;
             top: 8px;
             z-index: 2;
@@ -609,15 +611,15 @@ HTML_PAGE = """<!doctype html>
         .filter-box select { width: auto; min-width: 170px; }
         button {
             border: 1px solid var(--line);
-            background: white;
+            background: #1a2131;
             color: var(--ink);
             border-radius: 10px;
             padding: 9px 12px;
             cursor: pointer;
             font-weight: 600;
         }
-        button.primary { background: var(--accent); border-color: var(--accent); color: white; }
-        button.secondary { background: #fff7ed; border-color: #fed7aa; color: #7c2d12; }
+        button.primary { background: var(--accent); border-color: var(--accent); color: #071a18; }
+        button.secondary { background: #2a1f1a; border-color: #5a3a2a; color: #f7b955; }
         button:disabled { opacity: 0.55; cursor: not-allowed; }
         .status { margin-top: 10px; font-size: 14px; }
         .grid {
@@ -630,16 +632,18 @@ HTML_PAGE = """<!doctype html>
         }
         table { width: 100%; border-collapse: collapse; min-width: 1450px; }
         th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
-        th { position: sticky; top: 0; background: #f7f3e6; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
-        tr:hover td { background: #fffcf1; }
+        th { position: sticky; top: 0; background: #20283a; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+        tr:hover td { background: #232c40; }
         input, select {
             width: 100%;
-            border: 1px solid #d4cfbd;
+            border: 1px solid #3a445f;
             border-radius: 8px;
             padding: 7px 8px;
             font-size: 13px;
-            background: white;
+            background: var(--field);
+            color: var(--ink);
         }
+        input::placeholder { color: #7f8aa3; }
         .mini { font-size: 12px; color: var(--muted); }
         .pill {
             display: inline-block;
@@ -648,16 +652,16 @@ HTML_PAGE = """<!doctype html>
             padding: 2px 8px;
             font-size: 12px;
             font-weight: 600;
-            background: #fff;
+            background: #1a2131;
         }
-        .review { color: var(--warn); border-color: #facc15; }
-        .sorted { color: var(--ok); border-color: #86efac; }
-        .missing { color: var(--err); border-color: #fecaca; }
-        .status-pending { color: #334155; border-color: #cbd5e1; }
-        .status-saved { color: #7c2d12; border-color: #fdba74; background: #fff7ed; }
-        .status-deployed { color: #14532d; border-color: #86efac; background: #f0fdf4; }
-        .status-missing { color: #991b1b; border-color: #fca5a5; background: #fef2f2; }
-        a.filelink { color: #0e7490; text-decoration: none; }
+        .review { color: var(--warn); border-color: #f7b955; }
+        .sorted { color: var(--ok); border-color: #55d187; }
+        .missing { color: var(--err); border-color: #ff6b6b; }
+        .status-pending { color: #c9d4e8; border-color: #4a5b7a; }
+        .status-saved { color: #f7b955; border-color: #7a5a2a; background: #2a1f1a; }
+        .status-deployed { color: #55d187; border-color: #2f6b4d; background: #16271f; }
+        .status-missing { color: #ff9b9b; border-color: #7a2a2a; background: #2a1717; }
+        a.filelink { color: #67c7ff; text-decoration: none; }
         a.filelink:hover { text-decoration: underline; }
         .learn { display: flex; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
         .learn label { display: inline-flex; align-items: center; gap: 4px; }
