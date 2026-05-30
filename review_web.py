@@ -1642,54 +1642,55 @@ async function doLogin(event) {
 class Handler(BaseHTTPRequestHandler):
 
         # --- OLLAMA VERSION/UPDATE ---
-        def _ollama_version_payload(self) -> dict[str, Any]:
-            import shutil
-            import subprocess
-            import re
-            ollama_path = shutil.which("ollama")
-            if not ollama_path:
-                return {"ok": False, "error": "Ollama nicht installiert oder nicht im $PATH."}
-            try:
-                proc = subprocess.run([ollama_path, "--version"], capture_output=True, text=True, timeout=10)
-                if proc.returncode != 0:
-                    return {"ok": False, "error": "Ollama-Version konnte nicht ermittelt werden."}
-                installed = proc.stdout.strip()
-            except Exception as exc:
-                return {"ok": False, "error": f"Fehler: {exc}"}
-            # Hole neueste Version von ollama.com
-            try:
-                import urllib.request
-                html = urllib.request.urlopen("https://ollama.com/download").read().decode("utf-8")
-                m = re.search(r'Ollama ([0-9]+\\.[0-9]+\\.[0-9]+)', html)
-                latest = m.group(1) if m else None
-            except Exception:
-                latest = None
-            update_available = False
-            msg = f"Installiert: {installed}"
-            if latest:
-                msg += f" | Neueste: {latest}"
-                update_available = installed != latest
-            else:
-                msg += " | Neueste Version nicht ermittelbar"
-            if update_available:
-                msg += " | Update verfügbar!"
-            else:
-                msg += " | Bereits aktuell."
-            return {"ok": True, "installed": installed, "latest": latest, "update_available": update_available, "message": msg}
 
-        def _ollama_update(self) -> dict[str, Any]:
-            import shutil
-            import subprocess
-            ollama_path = shutil.which("ollama")
-            if not ollama_path:
-                return {"ok": False, "error": "Ollama nicht installiert oder nicht im $PATH."}
-            try:
-                proc = subprocess.run(["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"], capture_output=True, text=True, timeout=180)
-                if proc.returncode != 0:
-                    return {"ok": False, "error": "Update fehlgeschlagen", "details": proc.stderr or proc.stdout}
-                return {"ok": True, "message": "Ollama wurde aktualisiert."}
-            except Exception as exc:
-                return {"ok": False, "error": f"Update-Fehler: {exc}"}
+    def _ollama_version_payload(self) -> dict[str, Any]:
+        import shutil
+        import subprocess
+        import re
+        ollama_path = shutil.which("ollama")
+        if not ollama_path:
+            return {"ok": False, "error": "Ollama nicht installiert oder nicht im $PATH."}
+        try:
+            proc = subprocess.run([ollama_path, "--version"], capture_output=True, text=True, timeout=10)
+            if proc.returncode != 0:
+                return {"ok": False, "error": "Ollama-Version konnte nicht ermittelt werden."}
+            installed = proc.stdout.strip()
+        except Exception as exc:
+            return {"ok": False, "error": f"Fehler: {exc}"}
+        # Hole neueste Version von ollama.com
+        try:
+            import urllib.request
+            html = urllib.request.urlopen("https://ollama.com/download").read().decode("utf-8")
+            m = re.search(r'Ollama ([0-9]+\\.[0-9]+\\.[0-9]+)', html)
+            latest = m.group(1) if m else None
+        except Exception:
+            latest = None
+        update_available = False
+        msg = f"Installiert: {installed}"
+        if latest:
+            msg += f" | Neueste: {latest}"
+            update_available = installed != latest
+        else:
+            msg += " | Neueste Version nicht ermittelbar"
+        if update_available:
+            msg += " | Update verfügbar!"
+        else:
+            msg += " | Bereits aktuell."
+        return {"ok": True, "installed": installed, "latest": latest, "update_available": update_available, "message": msg}
+
+    def _ollama_update(self) -> dict[str, Any]:
+        import shutil
+        import subprocess
+        ollama_path = shutil.which("ollama")
+        if not ollama_path:
+            return {"ok": False, "error": "Ollama nicht installiert oder nicht im $PATH."}
+        try:
+            proc = subprocess.run(["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"], capture_output=True, text=True, timeout=180)
+            if proc.returncode != 0:
+                return {"ok": False, "error": "Update fehlgeschlagen", "details": proc.stderr or proc.stdout}
+            return {"ok": True, "message": "Ollama wurde aktualisiert."}
+        except Exception as exc:
+            return {"ok": False, "error": f"Update-Fehler: {exc}"}
             if parsed.path == "/api/ollama-version":
                 self._json_response(self._ollama_version_payload())
                 return
