@@ -571,7 +571,7 @@ HTML_PAGE = """<!doctype html>
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>Document Review Deploy</title>
+    <title>Dokumente zur Pruefung</title>
     <style>
         :root {
             --bg: #f5f4ef;
@@ -668,13 +668,13 @@ HTML_PAGE = """<!doctype html>
 <body>
     <div class=\"wrap\">
         <div class=\"top\">
-            <h1>Review vor Deploy</h1>
+            <h1>Dokumente zur Pruefung vor Ausfuehrung</h1>
             <div class=\"meta\" id=\"meta\"></div>
             <div class=\"actions\">
                 <button onclick=\"reloadData()\">Neu laden</button>
                 <button onclick=\"triggerScan()\">Scan jetzt starten</button>
                 <button class=\"secondary\" onclick=\"saveEdits()\">Aenderungen speichern</button>
-                <button class=\"primary\" onclick=\"deployAll()\">Deploy ausfuehren</button>
+                <button class=\"primary\" onclick=\"deployAll()\">Ausfuehrung starten</button>
                 <button onclick=\"window.location.href='/config'\">Konfiguration</button>
                 <label class="filter-box">
                     Status-Filter
@@ -684,7 +684,7 @@ HTML_PAGE = """<!doctype html>
                         <option value="pending">Pending</option>
                         <option value="saved">Saved</option>
                         <option value="missing">Missing</option>
-                        <option value="deployed">Deployed</option>
+                        <option value="deployed">Ausgefuehrt</option>
                     </select>
                 </label>
             </div>
@@ -736,13 +736,22 @@ function categoryOptions(selected) {
     return DATA.categories.map(c => `<option ${c === selected ? 'selected' : ''} value=\"${esc(c)}\">${esc(c)}</option>`).join('');
 }
 
+function uiStatusLabel(status) {
+    const key = String(status || 'pending').toLowerCase();
+    if (key === 'pending') return 'OFFEN';
+    if (key === 'saved') return 'GESPEICHERT';
+    if (key === 'missing') return 'FEHLEND';
+    if (key === 'deployed') return 'AUSGEFUEHRT';
+    return key.toUpperCase();
+}
+
 function rowMarkup(row) {
     const badge = row.review
-        ? '<span class="pill review">REVIEW</span>'
-        : '<span class="pill sorted">SORTED</span>';
+        ? '<span class="pill review">PRUEFEN</span>'
+        : '<span class="pill sorted">BEREIT</span>';
     const missing = row.source_exists ? '' : '<div><span class="pill missing">DATEI FEHLT</span></div>';
     const statusClass = `status-${String(row.status || 'pending')}`;
-    const statusLabel = String(row.status || 'pending').toUpperCase();
+    const statusLabel = uiStatusLabel(row.status);
     const deployDisabled = row.status === 'deployed' ? 'disabled' : '';
 
     return `<tr data-id=\"${esc(row.id)}\">
@@ -786,7 +795,7 @@ function rowMarkup(row) {
         <td>
             <div class=\"row-actions\">
                 <button onclick=\"saveRow('${esc(row.id)}')\" ${deployDisabled}>Speichern</button>
-                <button class=\"primary\" onclick=\"deployRow('${esc(row.id)}')\" ${deployDisabled}>Deploy Zeile</button>
+                <button class=\"primary\" onclick=\"deployRow('${esc(row.id)}')\" ${deployDisabled}>Ausfuehren</button>
             </div>
         </td>
     </tr>`;
@@ -852,7 +861,7 @@ async function reloadData() {
 
     const counts = payload.counts || {};
     const openCount = (counts.pending || 0) + (counts.saved || 0) + (counts.missing || 0);
-    document.getElementById('meta').textContent = `Log: ${payload.log_file} | State: ${payload.state_file} | Aliases: ${payload.aliases_file} | Pending=${counts.pending || 0}, Saved=${counts.saved || 0}, Missing=${counts.missing || 0}, Deployed=${counts.deployed || 0}`;
+    document.getElementById('meta').textContent = `Log: ${payload.log_file} | Zustand: ${payload.state_file} | Aliase: ${payload.aliases_file} | Offen=${counts.pending || 0}, Gespeichert=${counts.saved || 0}, Fehlend=${counts.missing || 0}, Ausgefuehrt=${counts.deployed || 0}`;
 
     const shownCount = renderRows();
     const dlSender = `<datalist id=\"sender-mem\">${optionsFor('sender')}</datalist>`;
@@ -942,14 +951,14 @@ async function deployAll() {
         status('Keine offenen Eintraege.');
         return;
     }
-    status('Deploy laeuft...');
+    status('Ausfuehrung laeuft...');
     const res = await fetch('/api/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows })
     });
     const payload = await res.json();
-    const msg = `Deploy fertig: moved=${payload.applied}, missing=${payload.missing}, gelernt=${payload.learned_aliases}, errors=${(payload.errors || []).length}`;
+    const msg = `Ausfuehrung fertig: verschoben=${payload.applied}, fehlend=${payload.missing}, gelernt=${payload.learned_aliases}, fehler=${(payload.errors || []).length}`;
     status(msg);
     await reloadData();
 }
@@ -960,14 +969,14 @@ async function deployRow(id) {
         status('Zeile nicht gefunden.');
         return;
     }
-    status('Deploy Zeile laeuft...');
+    status('Ausfuehrung fuer Zeile laeuft...');
     const res = await fetch('/api/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows: [rowPayload(tr)] })
     });
     const payload = await res.json();
-    const msg = `Zeile deployt: moved=${payload.applied}, missing=${payload.missing}, gelernt=${payload.learned_aliases}, errors=${(payload.errors || []).length}`;
+    const msg = `Zeile ausgefuehrt: verschoben=${payload.applied}, fehlend=${payload.missing}, gelernt=${payload.learned_aliases}, fehler=${(payload.errors || []).length}`;
     status(msg);
     await reloadData();
 }
@@ -985,7 +994,7 @@ CONFIG_PAGE = """<!doctype html>
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>Konfiguration - Document Review Deploy</title>
+    <title>Konfiguration - Dokumente zur Pruefung</title>
     <style>
         :root {
             --bg: #0f1117;
@@ -1139,7 +1148,7 @@ CONFIG_PAGE = """<!doctype html>
             <div class=\"actions\">
                 <button onclick=\"loadConfig()\">Neu laden</button>
                 <button class=\"primary\" onclick=\"saveConfig()\">Speichern</button>
-                <button onclick=\"window.location.href='/'\">Zurueck zur Review</button>
+                <button onclick=\"window.location.href='/'\">Zurueck zur Pruefung</button>
             </div>
 
             <div class=\"status\" id=\"status\"></div>
@@ -1234,7 +1243,7 @@ LOGIN_PAGE = """<!doctype html>
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>Login - Document Review Deploy</title>
+    <title>Login - Dokumente zur Pruefung</title>
     <style>
         body {
             margin: 0;
