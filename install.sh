@@ -203,13 +203,15 @@ set_or_generate_web_password() {
   local entered=""
   local confirm=""
 
+  # Never rotate password on reinstall unless user removes the file explicitly.
+  if [[ -f "$password_file" ]]; then
+    chmod 600 "$password_file"
+    echo "Keeping existing password file: $password_file"
+    return
+  fi
+
   # In non-interactive mode, keep existing password or generate a new one.
   if [[ ! -t 0 ]]; then
-    if [[ -f "$password_file" ]]; then
-      chmod 600 "$password_file"
-      echo "Keeping existing password file (non-interactive mode): $password_file"
-      return
-    fi
     "$VENV_DIR/bin/python" - <<'PY' > "$password_file"
 import secrets
 print(secrets.token_urlsafe(24))

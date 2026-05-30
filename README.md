@@ -126,6 +126,7 @@ Hinweise:
 - kein `git clone`/Checkout im Skript
 - fuer apt-Schritte sind root/sudo Rechte noetig
 - wenn `install.sh` als einzelnes File (z. B. per wget/curl gespeichert) ausserhalb eines Repos ausgefuehrt wird, loescht es sich nach erfolgreicher Installation selbst
+- bei erneutem Ausfuehren von `install.sh` bleibt eine vorhandene Passwortdatei (`.review_web_password`) unveraendert
 
 ## Deinstallation
 
@@ -170,6 +171,30 @@ sudo systemctl stop ollama
 sudo systemctl disable ollama
 sudo apt-get remove -y ollama
 sudo apt-get autoremove -y
+```
+
+## Update einer bestehenden Installation
+
+Wenn du bereits per `install.sh` installiert hast, update so:
+
+```bash
+cd ~/.local/share/ollama-document-assistant
+git pull --ff-only
+bash ./install.sh --install-dir ~/.local/share/ollama-document-assistant
+systemctl --user restart ollama-document-assistant.service
+systemctl --user status ollama-document-assistant.service
+```
+
+Hinweis:
+
+- `assistant_config.json` bleibt erhalten (wird nicht ueberschrieben, wenn vorhanden)
+
+Falls im Installationsordner kein `.git` vorhanden ist:
+
+```bash
+git clone https://github.com/maheis/ollama-document-assistant.git /tmp/oda-update
+bash /tmp/oda-update/install.sh --install-dir ~/.local/share/ollama-document-assistant
+systemctl --user restart ollama-document-assistant.service
 ```
 
 ## Web-Review und Deploy
