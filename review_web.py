@@ -800,6 +800,7 @@ function rowMarkup(row) {
     const statusLabel = uiStatusLabel(row.status);
     const deployDisabled = row.status === 'deployed' ? 'disabled' : '';
 
+
     return `<tr data-id="${esc(row.id)}">
         <td class="col-file">
             <a class="filelink" target="_blank" href="/file?id=${encodeURIComponent(row.id)}">${esc(row.source_name)}</a>
@@ -838,30 +839,7 @@ function rowMarkup(row) {
             </div>
         </td>
     </tr>`;
-        async function deleteRow(id) {
-            if (!confirm('Eintrag wirklich löschen?')) return;
-            status('Lösche Eintrag...');
-            const res = await fetch('/api/delete-entry', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id })
-            });
-            const payload = await res.json();
-            if (!res.ok || payload.ok === false) {
-                status(payload.error || 'Löschen fehlgeschlagen', 'err');
-                return;
-            }
-            status('Eintrag gelöscht.', 'ok');
-            await reloadData();
-        }
-        </td>
-        <td>
-            <div class=\"row-actions\">
-                <button onclick=\"saveRow('${esc(row.id)}')\" ${deployDisabled}>Speichern</button>
-                <button class=\"primary\" onclick=\"deployRow('${esc(row.id)}')\" ${deployDisabled}>Ausführen</button>
-            </div>
-        </td>
-    </tr>`;
+
 }
 
 function rowPayload(tr) {
@@ -1019,22 +997,23 @@ async function saveEdits() {
     await reloadData();
 }
 
-async function saveRow(id) {
-    const tr = findRow(id);
-    if (!tr) {
-        status('Zeile nicht gefunden.');
-        return;
-    }
-    const res = await fetch('/api/save-edits', {
+
+async function deleteRow(id) {
+    if (!confirm('Eintrag wirklich löschen?')) return;
+    status('Lösche Eintrag...');
+    const res = await fetch('/api/delete-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: [rowPayload(tr)] })
+        body: JSON.stringify({ id })
     });
     const payload = await res.json();
-    status(`Zeile gespeichert: ${payload.updated}`);
+    if (!res.ok || payload.ok === false) {
+        status(payload.error || 'Löschen fehlgeschlagen', 'err');
+        return;
+    }
+    status('Eintrag gelöscht.', 'ok');
     await reloadData();
 }
-
 async function deployAll() {
     const rows = collectRows();
     if (!rows.length) {
