@@ -1216,7 +1216,9 @@ def find_latest_log_file(explicit: str, base_dir: Path) -> Path:
         if latest_dated is not None:
             return latest_dated.resolve()
 
-        raise FileNotFoundError(f"Log file not found: {p}")
+        # Fresh installs may configure a log file that does not exist yet.
+        # Return the configured path and let sync start with an empty state.
+        return p.resolve()
 
     candidates: list[Path] = []
     for d in [base_dir / "logs", Path("/tmp")]:

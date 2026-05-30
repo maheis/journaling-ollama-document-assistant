@@ -440,6 +440,8 @@ fi
 
 echo "[4/7] Ensuring required folders/files"
 mkdir -p "$PROJECT_DIR/inbox"
+mkdir -p "$PROJECT_DIR/logs"
+touch "$PROJECT_DIR/logs/organize_log.jsonl"
 ensure_assistant_config
 
 echo "[5/7] Ensuring web password file"

@@ -12,8 +12,6 @@ Wichtiges Prinzip:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maheis/ollama-document-assistant/main/install.sh | bash -s -- --full-setup
-# oder
-wget -qO- https://raw.githubusercontent.com/maheis/ollama-document-assistant/main/install.sh | bash -s -- --full-setup
 ```
 
 ## Passwort auslesen
@@ -127,14 +125,22 @@ Hinweise:
 Mit Skript (empfohlen):
 
 ```bash
+bash ~/.local/share/ollama-document-assistant/uninstall.sh
+```
+
+Wenn du im geklonten Repository arbeitest:
+
+```bash
 bash ./uninstall.sh
 ```
 
 Optional (zusaetzlich Modell und Ollama entfernen):
 
 ```bash
-bash ./uninstall.sh --remove-models --remove-ollama
+bash ~/.local/share/ollama-document-assistant/uninstall.sh --remove-models --remove-ollama
 ```
+
+Wenn bei der Installation ein eigener `--install-dir` verwendet wurde, rufe das Skript aus genau diesem Verzeichnis auf.
 
 Manuell deinstallieren:
 
