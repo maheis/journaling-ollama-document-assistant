@@ -1112,6 +1112,7 @@ CONFIG_PAGE = """<!doctype html>
             text-transform: uppercase;
         }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .grid.stack { grid-template-columns: 1fr; }
         .field { display: flex; flex-direction: column; gap: 6px; }
         .field.wide { grid-column: 1 / -1; }
         label { font-size: 13px; color: #cad5ea; font-weight: 600; }
@@ -1152,23 +1153,23 @@ CONFIG_PAGE = """<!doctype html>
             <p class=\"meta\" id=\"meta\"></p>
 
             <div class=\"section\">
-                <h2>Dienstpfade</h2>
+                <h2>In-/Outbox</h2>
                 <div class=\"grid\">
                     <div class=\"field wide\">
-                        <label for=\"input\">Inbox-Pfad (service.input)</label>
+                        <label for=\"input\">Inbox (service.input)</label>
                         <input id=\"input\" placeholder=\"./inbox\" />
                     </div>
 
                     <div class=\"field wide\">
-                        <label for=\"output\">Output-Pfad (service.output)</label>
+                        <label for=\"output\">Outbox (service.output)</label>
                         <input id=\"output\" placeholder=\"./output\" />
                     </div>
                 </div>
             </div>
 
             <div class=\"section\">
-                <h2>Scan und Scheduler</h2>
-                <div class=\"grid\">
+                <h2>Ausführungplan</h2>
+                <div class=\"grid stack\">
                     <div class=\"field\">
                         <label for=\"model\">Modell (service.model)</label>
                         <input id=\"model\" placeholder=\"qwen2.5:7b-instruct\" />
@@ -1201,7 +1202,22 @@ CONFIG_PAGE = """<!doctype html>
             </div>
 
             <div class=\"section\">
-                <h2>Leistung und Ollama</h2>
+                <h2>Sicherheit</h2>
+                <div class=\"grid\">
+                    <div class=\"field\">
+                        <label for=\"new-password\">Neues Web-Passwort</label>
+                        <input id=\"new-password\" type=\"password\" autocomplete=\"new-password\" placeholder=\"leer lassen = unverändert\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"new-password-confirm\">Neues Passwort bestätigen</label>
+                        <input id=\"new-password-confirm\" type=\"password\" autocomplete=\"new-password\" placeholder=\"Wiederholen\" />
+                    </div>
+                </div>
+            </div>
+
+            <div class=\"section\">
+                <h2>Ollama</h2>
                 <div class=\"grid\">
                     <div class=\"field\">
                         <label for=\"ollama-timeout\">Ollama Timeout Sekunden</label>
@@ -1236,21 +1252,6 @@ CONFIG_PAGE = """<!doctype html>
                     <div class=\"field\">
                         <label for=\"sleep-between-files\">Pause zwischen Dateien (Sekunden)</label>
                         <input id=\"sleep-between-files\" type=\"number\" min=\"0\" step=\"0.1\" placeholder=\"0.4\" />
-                    </div>
-                </div>
-            </div>
-
-            <div class=\"section\">
-                <h2>Sicherheit</h2>
-                <div class=\"grid\">
-                    <div class=\"field\">
-                        <label for=\"new-password\">Neues Web-Passwort</label>
-                        <input id=\"new-password\" type=\"password\" autocomplete=\"new-password\" placeholder=\"leer lassen = unverändert\" />
-                    </div>
-
-                    <div class=\"field\">
-                        <label for=\"new-password-confirm\">Neues Passwort bestätigen</label>
-                        <input id=\"new-password-confirm\" type=\"password\" autocomplete=\"new-password\" placeholder=\"Wiederholen\" />
                     </div>
                 </div>
             </div>
@@ -2157,7 +2158,7 @@ class Handler(BaseHTTPRequestHandler):
             new_password_confirm = str(auth_payload.get("new_password_confirm", ""))
 
             if not input_path:
-                self._json_response({"error": "service.input is required"}, status=400)
+                self._json_response({"error": "Inbox ist erforderlich (service.input)"}, status=400)
                 return
 
             try:
