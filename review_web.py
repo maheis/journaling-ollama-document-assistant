@@ -748,52 +748,50 @@ HTML_PAGE = """<!doctype html>
                 <button class=\"secondary\" onclick=\"saveEdits()\">Änderungen speichern</button>
                 <button class=\"primary\" onclick=\"deployAll()\">Ausführung starten</button>
                 <button onclick=\"window.location.href='/config'\">Konfiguration</button>
-                <label class="filter-box">
-                    Status-Filter
-                    <select id="status-filter" onchange="applyFilter()">
-                        <option value="all">Alle</option>
-                        <option value="open" selected>Offen (pending/saved/missing)</option>
-                        <option value="pending">Pending</option>
-                        <option value="saved">Saved</option>
-                        <option value="missing">Missing</option>
-                        <option value="deployed">Ausgeführt</option>
-                    </select>
-                </label>
-            </div>
-            <div class=\"status\" id=\"status\"></div>
-        </div>
 
-        <div class=\"grid\">
-            <table>
-                <thead>
-                    <tr>
-                        <th class="col-file">Datei</th>
-                        <th>Status</th>
-                        <th>Conf</th>
-                        <th>Sender</th>
-                        <th>Kategorie</th>
-                        <th>Kunden-Nr</th>
-                        <th>Titel</th>
-                        <th>Datum</th>
-                        <th>Zielvorschau</th>
-                        <th>Lernen</th>
-                        <th>Aktion</th>
-                    </tr>
-                </thead>
-                <tbody id=\"rows\"></tbody>
-            </table>
-        </div>
-    </div>
-
-<script>
-let DATA = { rows: [], categories: [], value_memory: {} };
-let CURRENT_FILTER = 'open';
-
-function esc(v) {
-    return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-}
-
-function status(text, cls = '') {
+                <div class="section">
+                    <h2>Ollama</h2>
+                    <div class="grid">
+                        <div class="field">
+                            <label for="ollama-timeout">Ollama Timeout Sekunden</label>
+                            <input id="ollama-timeout" type="number" min="1" step="1" placeholder="1800" />
+                        </div>
+                        <div class="field">
+                            <label for="ollama-retries">Ollama Retries</label>
+                            <input id="ollama-retries" type="number" min="0" step="1" placeholder="0" />
+                        </div>
+                        <div class="field">
+                            <label for="max-text-chars">Max. Textzeichen pro Anfrage</label>
+                            <input id="max-text-chars" type="number" min="100" step="100" placeholder="6000" />
+                        </div>
+                        <div class="field">
+                            <label for="process-nice">Process Nice</label>
+                            <input id="process-nice" type="number" min="0" step="1" placeholder="5" />
+                        </div>
+                        <div class="field">
+                            <label for="max-cpu-threads">Max CPU Threads (0 = kein Limit)</label>
+                            <input id="max-cpu-threads" type="number" min="0" step="1" placeholder="4" />
+                        </div>
+                        <div class="field">
+                            <label for="ollama-num-thread">Ollama Num Thread (0 = Default)</label>
+                            <input id="ollama-num-thread" type="number" min="0" step="1" placeholder="4" />
+                        </div>
+                        <div class="field">
+                            <label for="sleep-between-files">Pause zwischen Dateien (Sekunden)</label>
+                            <input id="sleep-between-files" type="number" min="0" step="0.1" placeholder="0.4" />
+                        </div>
+                    </div>
+                    <div class="grid">
+                        <div class="field wide">
+                            <label for="ollama-version-info">Ollama-Version</label>
+                            <input id="ollama-version-info" readonly value="Noch nicht geprüft" />
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <button onclick="checkOllamaVersion()" type="button">Ollama-Version prüfen</button>
+                        <button id="run-ollama-update-btn" class="primary" onclick="runOllamaUpdate()" type="button" disabled>Ollama Update durchführen</button>
+                    </div>
+                </div>
     const el = document.getElementById('status');
     el.textContent = text;
     el.className = 'status ' + cls;
@@ -894,21 +892,24 @@ function rowMarkup(row) {
 }
 
 function rowPayload(tr) {
+    // Automatisch lernen, wenn edited != default
+    const id = tr.dataset.id;
+    const sender = tr.querySelector('[name="sender"]').value;
+    const category = tr.querySelector('[name="category"]').value;
+    const customer_number = tr.querySelector('[name="customer_number"]').value;
+    const title = tr.querySelector('[name="title"]').value;
+    const date = tr.querySelector('[name="date"]').value;
+    const row = DATA.rows.find(r => r.id === id) || { default: {} };
+    const learn = {
+        sender: sender !== (row.default.sender || ""),
+        category: category !== (row.default.category || ""),
+        customer_number: customer_number !== (row.default.customer_number || ""),
+        title: title !== (row.default.title || ""),
+    };
     return {
-        id: tr.dataset.id,
-        edited: {
-            sender: tr.querySelector('[name="sender"]').value,
-            category: tr.querySelector('[name="category"]').value,
-            customer_number: tr.querySelector('[name="customer_number"]').value,
-            title: tr.querySelector('[name="title"]').value,
-            date: tr.querySelector('[name="date"]').value,
-        },
-        learn: {
-            sender: tr.querySelector('[name="learn_sender"]').checked,
-            category: tr.querySelector('[name="learn_category"]').checked,
-            customer_number: tr.querySelector('[name="learn_customer_number"]').checked,
-            title: tr.querySelector('[name="learn_title"]').checked,
-        }
+        id,
+        edited: { sender, category, customer_number, title, date },
+        learn
     };
 }
 
@@ -1359,6 +1360,38 @@ function setUpdateUI(payload) {
 }
 
 async function checkForUpdate() {
+    async function checkOllamaVersion() {
+        const info = byId('ollama-version-info');
+        const btn = byId('run-ollama-update-btn');
+        if (info) info.value = 'Prüfe Ollama-Version...';
+        btn.disabled = true;
+        const res = await fetch('/api/ollama-version');
+        const payload = await res.json();
+        if (!res.ok) {
+            info.value = payload.error || 'Fehler bei Prüfung';
+            return;
+        }
+        info.value = payload.message;
+        btn.disabled = !payload.update_available;
+    }
+
+    async function runOllamaUpdate() {
+        const btn = byId('run-ollama-update-btn');
+        btn.disabled = true;
+        const info = byId('ollama-version-info');
+        info.value = 'Führe Ollama-Update durch...';
+        const res = await fetch('/api/ollama-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const payload = await res.json();
+        if (!res.ok || payload.ok === false) {
+            info.value = payload.message || payload.error || 'Update fehlgeschlagen';
+            return;
+        }
+        info.value = payload.message || 'Ollama wurde aktualisiert.';
+    }
     const info = byId('update-info');
     if (info) {
         info.value = 'Prüfe auf Updates...';
@@ -1607,6 +1640,61 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
+        def _ollama_version_payload(self) -> dict[str, Any]:
+            import shutil
+            import subprocess
+            import re
+            ollama_path = shutil.which("ollama")
+            if not ollama_path:
+                return {"ok": False, "error": "Ollama nicht installiert oder nicht im $PATH."}
+            try:
+                proc = subprocess.run([ollama_path, "--version"], capture_output=True, text=True, timeout=10)
+                if proc.returncode != 0:
+                    return {"ok": False, "error": "Ollama-Version konnte nicht ermittelt werden."}
+                installed = proc.stdout.strip()
+            except Exception as exc:
+                return {"ok": False, "error": f"Fehler: {exc}"}
+            # Hole neueste Version von ollama.com
+            try:
+                import urllib.request
+                html = urllib.request.urlopen("https://ollama.com/download").read().decode("utf-8")
+                m = re.search(r'Ollama ([0-9]+\\.[0-9]+\\.[0-9]+)', html)
+                latest = m.group(1) if m else None
+            except Exception:
+                latest = None
+            update_available = False
+            msg = f"Installiert: {installed}"
+            if latest:
+                msg += f" | Neueste: {latest}"
+                update_available = installed != latest
+            else:
+                msg += " | Neueste Version nicht ermittelbar"
+            if update_available:
+                msg += " | Update verfügbar!"
+            else:
+                msg += " | Bereits aktuell."
+            return {"ok": True, "installed": installed, "latest": latest, "update_available": update_available, "message": msg}
+
+        def _ollama_update(self) -> dict[str, Any]:
+            import shutil
+            import subprocess
+            ollama_path = shutil.which("ollama")
+            if not ollama_path:
+                return {"ok": False, "error": "Ollama nicht installiert oder nicht im $PATH."}
+            try:
+                proc = subprocess.run(["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"], capture_output=True, text=True, timeout=180)
+                if proc.returncode != 0:
+                    return {"ok": False, "error": "Update fehlgeschlagen", "details": proc.stderr or proc.stdout}
+                return {"ok": True, "message": "Ollama wurde aktualisiert."}
+            except Exception as exc:
+                return {"ok": False, "error": f"Update-Fehler: {exc}"}
+            if parsed.path == "/api/ollama-version":
+                self._json_response(self._ollama_version_payload())
+                return
+
+            if parsed.path == "/api/ollama-update":
+                self._json_response(self._ollama_update())
+                return
     store: ReviewStore
     auth: PasswordAuth
     config_path: Path
