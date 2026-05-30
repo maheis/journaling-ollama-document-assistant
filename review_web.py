@@ -571,7 +571,7 @@ HTML_PAGE = """<!doctype html>
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>Dokumente zur Pruefung</title>
+    <title>Dokumente zur Prüfung</title>
     <style>
         :root {
             --bg: #0f1117;
@@ -672,13 +672,13 @@ HTML_PAGE = """<!doctype html>
 <body>
     <div class=\"wrap\">
         <div class=\"top\">
-            <h1>Dokumente zur Pruefung vor Ausfuehrung</h1>
+            <h1>Dokumente zur Prüfung</h1>
             <div class=\"meta\" id=\"meta\"></div>
             <div class=\"actions\">
                 <button onclick=\"reloadData()\">Neu laden</button>
                 <button onclick=\"triggerScan()\">Scan jetzt starten</button>
-                <button class=\"secondary\" onclick=\"saveEdits()\">Aenderungen speichern</button>
-                <button class=\"primary\" onclick=\"deployAll()\">Ausfuehrung starten</button>
+                <button class=\"secondary\" onclick=\"saveEdits()\">Änderungen speichern</button>
+                <button class=\"primary\" onclick=\"deployAll()\">Ausführung starten</button>
                 <button onclick=\"window.location.href='/config'\">Konfiguration</button>
                 <label class="filter-box">
                     Status-Filter
@@ -688,7 +688,7 @@ HTML_PAGE = """<!doctype html>
                         <option value="pending">Pending</option>
                         <option value="saved">Saved</option>
                         <option value="missing">Missing</option>
-                        <option value="deployed">Ausgefuehrt</option>
+                        <option value="deployed">Ausgeführt</option>
                     </select>
                 </label>
             </div>
@@ -745,13 +745,13 @@ function uiStatusLabel(status) {
     if (key === 'pending') return 'OFFEN';
     if (key === 'saved') return 'GESPEICHERT';
     if (key === 'missing') return 'FEHLEND';
-    if (key === 'deployed') return 'AUSGEFUEHRT';
+    if (key === 'deployed') return 'AUSGEFÜHRT';
     return key.toUpperCase();
 }
 
 function rowMarkup(row) {
     const badge = row.review
-        ? '<span class="pill review">PRUEFEN</span>'
+        ? '<span class="pill review">PRÜFEN</span>'
         : '<span class="pill sorted">BEREIT</span>';
     const missing = row.source_exists ? '' : '<div><span class="pill missing">DATEI FEHLT</span></div>';
     const statusClass = `status-${String(row.status || 'pending')}`;
@@ -799,7 +799,7 @@ function rowMarkup(row) {
         <td>
             <div class=\"row-actions\">
                 <button onclick=\"saveRow('${esc(row.id)}')\" ${deployDisabled}>Speichern</button>
-                <button class=\"primary\" onclick=\"deployRow('${esc(row.id)}')\" ${deployDisabled}>Ausfuehren</button>
+                <button class=\"primary\" onclick=\"deployRow('${esc(row.id)}')\" ${deployDisabled}>Ausführen</button>
             </div>
         </td>
     </tr>`;
@@ -865,7 +865,7 @@ async function reloadData() {
 
     const counts = payload.counts || {};
     const openCount = (counts.pending || 0) + (counts.saved || 0) + (counts.missing || 0);
-    document.getElementById('meta').textContent = `Log: ${payload.log_file} | Zustand: ${payload.state_file} | Aliase: ${payload.aliases_file} | Offen=${counts.pending || 0}, Gespeichert=${counts.saved || 0}, Fehlend=${counts.missing || 0}, Ausgefuehrt=${counts.deployed || 0}`;
+    document.getElementById('meta').textContent = `Log: ${payload.log_file} | Zustand: ${payload.state_file} | Aliase: ${payload.aliases_file} | Offen=${counts.pending || 0}, Gespeichert=${counts.saved || 0}, Fehlend=${counts.missing || 0}, Ausgeführt=${counts.deployed || 0}`;
 
     const shownCount = renderRows();
     const dlSender = `<datalist id=\"sender-mem\">${optionsFor('sender')}</datalist>`;
@@ -874,7 +874,7 @@ async function reloadData() {
 
     document.querySelectorAll('datalist').forEach(n => n.remove());
     document.body.insertAdjacentHTML('beforeend', dlSender + dlCustomer + dlTitle);
-    status(`Bereit. ${openCount} offene Eintraege, ${shownCount} angezeigt.`);
+    status(`Bereit. ${openCount} offene Einträge, ${shownCount} angezeigt.`);
     await refreshScanStatus();
 }
 
@@ -885,7 +885,7 @@ async function refreshScanStatus() {
         return;
     }
     if (payload.running) {
-        status('Scan laeuft gerade im Hintergrund...');
+        status('Scan läuft gerade im Hintergrund...');
         return;
     }
     if (typeof payload.last_exit_code === 'number') {
@@ -913,7 +913,7 @@ async function triggerScan() {
     }
 
     if (payload.running) {
-        status('Ein Scan laeuft bereits.', 'warn');
+        status('Ein Scan läuft bereits.', 'warn');
         return;
     }
 
@@ -952,17 +952,17 @@ async function saveRow(id) {
 async function deployAll() {
     const rows = collectRows();
     if (!rows.length) {
-        status('Keine offenen Eintraege.');
+        status('Keine offenen Einträge.');
         return;
     }
-    status('Ausfuehrung laeuft...');
+    status('Ausführung läuft...');
     const res = await fetch('/api/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows })
     });
     const payload = await res.json();
-    const msg = `Ausfuehrung fertig: verschoben=${payload.applied}, fehlend=${payload.missing}, gelernt=${payload.learned_aliases}, fehler=${(payload.errors || []).length}`;
+    const msg = `Ausführung fertig: verschoben=${payload.applied}, fehlend=${payload.missing}, gelernt=${payload.learned_aliases}, fehler=${(payload.errors || []).length}`;
     status(msg);
     await reloadData();
 }
@@ -973,14 +973,14 @@ async function deployRow(id) {
         status('Zeile nicht gefunden.');
         return;
     }
-    status('Ausfuehrung fuer Zeile laeuft...');
+    status('Ausführung für Zeile läuft...');
     const res = await fetch('/api/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows: [rowPayload(tr)] })
     });
     const payload = await res.json();
-    const msg = `Zeile ausgefuehrt: verschoben=${payload.applied}, fehlend=${payload.missing}, gelernt=${payload.learned_aliases}, fehler=${(payload.errors || []).length}`;
+    const msg = `Zeile ausgeführt: verschoben=${payload.applied}, fehlend=${payload.missing}, gelernt=${payload.learned_aliases}, fehler=${(payload.errors || []).length}`;
     status(msg);
     await reloadData();
 }
@@ -998,7 +998,7 @@ CONFIG_PAGE = """<!doctype html>
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>Konfiguration - Dokumente zur Pruefung</title>
+    <title>Konfiguration - Dokumente zur Prüfung</title>
     <style>
         :root {
             --bg: #0f1117;
@@ -1123,7 +1123,7 @@ CONFIG_PAGE = """<!doctype html>
                     </div>
 
                     <div class=\"field\">
-                        <label for=\"daily-time\">Taegliche Startzeit (service.daily_time, HH:MM)</label>
+                        <label for=\"daily-time\">Tägliche Startzeit (service.daily_time, HH:MM)</label>
                         <input id=\"daily-time\" placeholder=\"02:00\" />
                     </div>
 
@@ -1139,11 +1139,11 @@ CONFIG_PAGE = """<!doctype html>
                 <div class=\"grid\">
                     <div class=\"field\">
                         <label for=\"new-password\">Neues Web-Passwort</label>
-                        <input id=\"new-password\" type=\"password\" autocomplete=\"new-password\" placeholder=\"leer lassen = unveraendert\" />
+                        <input id=\"new-password\" type=\"password\" autocomplete=\"new-password\" placeholder=\"leer lassen = unverändert\" />
                     </div>
 
                     <div class=\"field\">
-                        <label for=\"new-password-confirm\">Neues Passwort bestaetigen</label>
+                        <label for=\"new-password-confirm\">Neues Passwort bestätigen</label>
                         <input id=\"new-password-confirm\" type=\"password\" autocomplete=\"new-password\" placeholder=\"Wiederholen\" />
                     </div>
                 </div>
@@ -1154,19 +1154,19 @@ CONFIG_PAGE = """<!doctype html>
                 <div class=\"grid\">
                     <div class=\"field wide\">
                         <label for=\"update-info\">Repository-Status</label>
-                        <input id=\"update-info\" readonly value=\"Noch nicht geprueft\" />
+                        <input id=\"update-info\" readonly value=\"Noch nicht geprüft\" />
                     </div>
                 </div>
                 <div class=\"actions\">
-                    <button onclick=\"checkForUpdate()\">Auf Update pruefen</button>
-                    <button id=\"run-update-btn\" class=\"primary\" onclick=\"runUpdate()\" disabled>Update durchfuehren</button>
+                    <button onclick=\"checkForUpdate()\">Auf Update prüfen</button>
+                    <button id=\"run-update-btn\" class=\"primary\" onclick=\"runUpdate()\" disabled>Update durchführen</button>
                 </div>
             </div>
 
             <div class=\"actions\">
                 <button onclick=\"loadConfig()\">Neu laden</button>
                 <button class=\"primary\" onclick=\"saveConfig()\">Speichern</button>
-                <button onclick=\"window.location.href='/'\">Zurueck zur Pruefung</button>
+                <button onclick=\"window.location.href='/'\">Zurück zur Prüfung</button>
             </div>
 
             <div class=\"status\" id=\"status\"></div>
@@ -1191,7 +1191,7 @@ function setUpdateUI(payload) {
         return;
     }
     if (!payload || payload.supported === false) {
-        info.value = payload?.message || 'Update-Pruefung nicht verfuegbar';
+        info.value = payload?.message || 'Update-Prüfung nicht verfügbar';
         btn.disabled = true;
         return;
     }
@@ -1207,16 +1207,16 @@ function setUpdateUI(payload) {
 async function checkForUpdate() {
     const info = byId('update-info');
     if (info) {
-        info.value = 'Pruefe auf Updates...';
+        info.value = 'Prüfe auf Updates...';
     }
     const res = await fetch('/api/update-status');
     const payload = await res.json();
     setUpdateUI(payload);
     if (!res.ok) {
-        status(payload.error || payload.message || 'Update-Pruefung fehlgeschlagen.', 'err');
+        status(payload.error || payload.message || 'Update-Prüfung fehlgeschlagen.', 'err');
         return;
     }
-    status(payload.message || 'Update-Status geprueft.', payload.available ? 'warn' : 'ok');
+    status(payload.message || 'Update-Status geprüft.', payload.available ? 'warn' : 'ok');
 }
 
 async function runUpdate() {
@@ -1224,7 +1224,7 @@ async function runUpdate() {
     if (btn) {
         btn.disabled = true;
     }
-    status('Fuehre Update durch...');
+    status('Führe Update durch...');
     const res = await fetch('/api/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1325,7 +1325,7 @@ LOGIN_PAGE = """<!doctype html>
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>Login - Dokumente zur Pruefung</title>
+    <title>Login - Dokumente zur Prüfung</title>
     <style>
         body {
             margin: 0;
@@ -1587,7 +1587,7 @@ class Handler(BaseHTTPRequestHandler):
         ahead = int(parts[0]) if len(parts) > 0 and parts[0].isdigit() else 0
         behind = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
         available = behind > 0
-        message = "Update verfuegbar" if available else "Bereits aktuell"
+        message = "Update verfügbar" if available else "Bereits aktuell"
 
         return {
             "supported": True,
