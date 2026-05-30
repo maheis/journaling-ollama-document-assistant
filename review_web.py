@@ -1468,44 +1468,60 @@ LOGIN_PAGE = """<!doctype html>
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>Login - Dokumente zur Prüfung</title>
     <style>
+        :root {
+            --bg: #0f1320;
+            --bg2: #111827;
+            --card: #131b2d;
+            --line: #2b3550;
+            --ink: #eef3ff;
+            --muted: #9aa7c0;
+            --accent: #34d399;
+            --err: #ff6b6b;
+            --field: #0e1526;
+        }
         body {
             margin: 0;
             min-height: 100vh;
             display: grid;
             place-items: center;
             font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-            background: radial-gradient(circle at top right, #ebe7d6 0%, #f5f4ef 40%), #f5f4ef;
-            color: #1d1f24;
+            background: radial-gradient(circle at top right, #20263a 0%, var(--bg) 42%), var(--bg2);
+            color: var(--ink);
         }
         .card {
             width: min(420px, 92vw);
-            background: #fffdf6;
-            border: 1px solid #dfdccf;
+            background: var(--card);
+            border: 1px solid var(--line);
             border-radius: 14px;
             padding: 20px;
-            box-shadow: 0 8px 30px rgba(30, 24, 10, 0.08);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
         }
         h1 { margin: 0 0 12px 0; font-size: 24px; }
-        p { margin: 0 0 12px 0; color: #6d727d; }
+        p { margin: 0 0 12px 0; color: var(--muted); }
         input {
             width: 100%;
-            border: 1px solid #d4cfbd;
+            border: 1px solid #3a445f;
             border-radius: 10px;
             padding: 10px 12px;
             font-size: 14px;
             margin-bottom: 12px;
+            background: var(--field);
+            color: var(--ink);
+        }
+        input::placeholder {
+            color: #7f8aa3;
         }
         button {
             width: 100%;
-            border: 1px solid #0f766e;
-            background: #0f766e;
-            color: #fff;
+            border: 1px solid var(--accent);
+            background: var(--accent);
+            color: #071a18;
             border-radius: 10px;
             padding: 10px 12px;
             font-weight: 700;
             cursor: pointer;
         }
-        .err { margin-top: 10px; color: #b91c1c; font-size: 13px; min-height: 18px; }
+        .err { margin-top: 10px; color: var(--err); font-size: 13px; min-height: 18px; }
     </style>
 </head>
 <body>
