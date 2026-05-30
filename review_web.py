@@ -606,6 +606,18 @@ HTML_PAGE = """<!doctype html>
         }
         h1 { margin: 0 0 10px 0; font-size: 22px; letter-spacing: 0.2px; }
         .meta { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+        .activity {
+            display: inline-block;
+            margin-bottom: 10px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 3px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #1a2131;
+        }
+        .activity.busy { color: #f7b955; border-color: #7a5a2a; background: #2a1f1a; }
+        .activity.idle { color: #55d187; border-color: #2f6b4d; background: #16271f; }
         .actions { display: flex; gap: 10px; flex-wrap: wrap; }
         .filter-box { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
         .filter-box select { width: auto; min-width: 170px; }
@@ -674,6 +686,7 @@ HTML_PAGE = """<!doctype html>
         <div class=\"top\">
             <h1>Dokumente zur Prüfung</h1>
             <div class=\"meta\" id=\"meta\"></div>
+            <div class="activity idle" id="activity-indicator">Systemstatus: Leerlauf</div>
             <div class=\"actions\">
                 <button onclick=\"reloadData()\">Neu laden</button>
                 <button onclick=\"triggerScan()\">Scan jetzt starten</button>
@@ -729,6 +742,17 @@ function status(text, cls = '') {
     const el = document.getElementById('status');
     el.textContent = text;
     el.className = 'status ' + cls;
+}
+
+function setActivityIndicator(payload) {
+    const el = document.getElementById('activity-indicator');
+    if (!el) {
+        return;
+    }
+    const busy = !!payload?.activity_running;
+    const label = busy ? 'Dokumentprüfung läuft' : 'Leerlauf';
+    el.textContent = `Systemstatus: ${label}`;
+    el.className = 'activity ' + (busy ? 'busy' : 'idle');
 }
 
 function optionsFor(field) {
@@ -884,6 +908,7 @@ async function refreshScanStatus() {
     if (!res.ok) {
         return;
     }
+    setActivityIndicator(payload);
     if (payload.running) {
         status('Scan läuft gerade im Hintergrund...');
         return;
@@ -1634,27 +1659,65 @@ class Handler(BaseHTTPRequestHandler):
         cmd.extend(extra_args)
         return cmd, project_dir
 
+    def _detect_organize_activity(self) -> bool:
+        config, load_errors = self._load_runtime_config()
+        if load_errors:
+            return False
+
+        project_dir = self._resolve_project_dir(config)
+        organize_path = str((project_dir / "organize.py").resolve())
+        try:
+            proc = subprocess.run(
+                ["ps", "-eo", "args"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except Exception:
+            return False
+
+        if proc.returncode != 0:
+            return False
+
+        for line in proc.stdout.splitlines():
+            if "organize.py" not in line:
+                continue
+            if organize_path in line:
+                return True
+        return False
+
     def _scan_status_payload(self) -> dict[str, Any]:
+        manual_running = False
         with self.scan_lock:
             proc = self.scan_proc
             if proc is not None:
                 rc = proc.poll()
                 if rc is None:
-                    return {
-                        "running": True,
-                        "pid": proc.pid,
-                        "last_exit_code": self.scan_last_exit_code,
-                        "last_finished_at": self.scan_last_finished_at,
-                    }
-                self.scan_last_exit_code = rc
-                self.scan_last_finished_at = time.time()
-                self.scan_proc = None
+                    manual_running = True
+                    manual_pid = proc.pid
+                else:
+                    self.scan_last_exit_code = rc
+                    self.scan_last_finished_at = time.time()
+                    self.scan_proc = None
+                    manual_pid = None
+            else:
+                manual_pid = None
 
-            return {
-                "running": False,
-                "last_exit_code": self.scan_last_exit_code,
-                "last_finished_at": self.scan_last_finished_at,
-            }
+        external_running = self._detect_organize_activity()
+        activity_running = manual_running or external_running
+
+        payload = {
+            "running": manual_running,
+            "last_exit_code": self.scan_last_exit_code,
+            "last_finished_at": self.scan_last_finished_at,
+            "activity_running": activity_running,
+            "activity_state": "busy" if activity_running else "idle",
+        }
+        if manual_pid is not None and manual_running:
+            payload["pid"] = manual_pid
+
+        return payload
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
