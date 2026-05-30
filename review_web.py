@@ -1025,6 +1025,16 @@ CONFIG_PAGE = """<!doctype html>
                     <label for=\"interval\">Scan-Intervall Sekunden (service.interval_seconds)</label>
                     <input id=\"interval\" type=\"number\" min=\"30\" step=\"1\" placeholder=\"300\" />
                 </div>
+
+                <div class=\"field\">
+                    <label for=\"new-password\">Neues Web-Passwort</label>
+                    <input id=\"new-password\" type=\"password\" autocomplete=\"new-password\" placeholder=\"leer lassen = unveraendert\" />
+                </div>
+
+                <div class=\"field\">
+                    <label for=\"new-password-confirm\">Neues Passwort bestaetigen</label>
+                    <input id=\"new-password-confirm\" type=\"password\" autocomplete=\"new-password\" placeholder=\"Wiederholen\" />
+                </div>
             </div>
 
             <div class=\"actions\">
@@ -1063,17 +1073,26 @@ async function loadConfig() {
     byId('output').value = service.output || '';
     byId('model').value = service.model || '';
     byId('interval').value = service.interval_seconds || 300;
-    byId('meta').textContent = `Config-Datei: ${payload.config_path}`;
+    byId('new-password').value = '';
+    byId('new-password-confirm').value = '';
+    byId('meta').textContent = `Config-Datei: ${payload.config_path} | Passwortdatei: ${payload.auth_password_file || '-'}`;
     status('Konfiguration geladen.', 'ok');
 }
 
 async function saveConfig() {
+    const newPassword = byId('new-password').value;
+    const newPasswordConfirm = byId('new-password-confirm').value;
+
     const body = {
         service: {
             input: byId('input').value,
             output: byId('output').value,
             model: byId('model').value,
             interval_seconds: byId('interval').value
+        },
+        auth: {
+            new_password: newPassword,
+            new_password_confirm: newPasswordConfirm
         }
     };
 
@@ -1093,7 +1112,9 @@ async function saveConfig() {
 
     const note = payload.restart_required ? ' Bitte Dienst neu starten.' : '';
     status('Gespeichert.' + note, 'ok');
-    byId('meta').textContent = `Config-Datei: ${payload.config_path}`;
+    byId('new-password').value = '';
+    byId('new-password-confirm').value = '';
+    byId('meta').textContent = `Config-Datei: ${payload.config_path} | Passwortdatei: ${payload.auth_password_file || '-'}`;
 }
 
 loadConfig();
@@ -1275,6 +1296,21 @@ class Handler(BaseHTTPRequestHandler):
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         self.config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    def _resolve_auth_password_file(self, config: dict[str, Any]) -> Path:
+        service = get_section(config, "service")
+        review = get_section(config, "review_web")
+
+        raw = str(service.get("auth_password_file", "")).strip()
+        if not raw:
+            raw = str(review.get("auth_password_file", "")).strip()
+        if not raw:
+            raw = ".review_web_password"
+
+        p = Path(raw).expanduser()
+        if not p.is_absolute():
+            p = self.config_path.parent / p
+        return p.resolve()
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
 
@@ -1317,6 +1353,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response(
                 {
                     "config_path": str(self.config_path),
+                    "auth_password_file": str(self._resolve_auth_password_file(config)),
                     "service": {
                         "input": str(service.get("input", "")).strip(),
                         "output": str(service.get("output", "")).strip(),
@@ -1405,10 +1442,13 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/config":
             service_payload = payload.get("service", {}) if isinstance(payload.get("service"), dict) else {}
+            auth_payload = payload.get("auth", {}) if isinstance(payload.get("auth"), dict) else {}
             input_path = str(service_payload.get("input", "")).strip()
             output_path = str(service_payload.get("output", "")).strip()
             model = str(service_payload.get("model", "")).strip()
             interval_raw = str(service_payload.get("interval_seconds", "")).strip()
+            new_password = str(auth_payload.get("new_password", ""))
+            new_password_confirm = str(auth_payload.get("new_password_confirm", ""))
 
             if not input_path:
                 self._json_response({"error": "service.input is required"}, status=400)
@@ -1423,6 +1463,14 @@ class Handler(BaseHTTPRequestHandler):
             if interval < 30:
                 self._json_response({"error": "service.interval_seconds must be >= 30"}, status=400)
                 return
+
+            if new_password or new_password_confirm:
+                if new_password != new_password_confirm:
+                    self._json_response({"error": "password confirmation does not match"}, status=400)
+                    return
+                if len(new_password.strip()) < 8:
+                    self._json_response({"error": "password must be at least 8 characters"}, status=400)
+                    return
 
             config, load_errors = self._load_runtime_config()
             if load_errors:
@@ -1439,7 +1487,19 @@ class Handler(BaseHTTPRequestHandler):
             service["output"] = output_path
             service["model"] = model
             service["interval_seconds"] = interval
+
+            review = config.get("review_web")
+            if not isinstance(review, dict):
+                review = {}
+
+            auth_password_file = self._resolve_auth_password_file(config)
+            auth_password_file_rel = os.path.relpath(auth_password_file, self.config_path.parent)
+            service["auth_password_file"] = auth_password_file_rel
+            service["auth_password"] = ""
+            review["auth_password_file"] = auth_password_file_rel
+            review["auth_password"] = ""
             config["service"] = service
+            config["review_web"] = review
 
             validation_errors = validate_config(config)
             if validation_errors:
@@ -1452,7 +1512,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"error": f"config_write_failed: {exc}"}, status=500)
                 return
 
-            self._json_response({"ok": True, "config_path": str(self.config_path), "restart_required": True})
+            if new_password:
+                try:
+                    auth_password_file.parent.mkdir(parents=True, exist_ok=True)
+                    auth_password_file.write_text(new_password.strip() + "\n", encoding="utf-8")
+                    os.chmod(auth_password_file, 0o600)
+                except Exception as exc:
+                    self._json_response({"error": f"password_write_failed: {exc}"}, status=500)
+                    return
+
+            self._json_response(
+                {
+                    "ok": True,
+                    "config_path": str(self.config_path),
+                    "auth_password_file": str(auth_password_file),
+                    "restart_required": True,
+                }
+            )
             return
 
         self._text_response("Not found", status=404, content_type="text/plain; charset=utf-8")

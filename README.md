@@ -276,6 +276,7 @@ Pfade konfigurieren:
 Hinweis zur Web-Konfigurationsseite:
 
 - speichert in `assistant_config.json` (service.input/output/model/interval_seconds)
+- Web-Passwort kann dort ebenfalls geaendert werden (wird in die Passwortdatei geschrieben)
 - danach Dienst neu starten, damit die neuen Werte aktiv werden:
 
 ```bash
