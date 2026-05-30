@@ -22,6 +22,8 @@ import os
 import re
 import secrets
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import unicodedata
@@ -670,6 +672,7 @@ HTML_PAGE = """<!doctype html>
             <div class=\"meta\" id=\"meta\"></div>
             <div class=\"actions\">
                 <button onclick=\"reloadData()\">Neu laden</button>
+                <button onclick=\"triggerScan()\">Scan jetzt starten</button>
                 <button class=\"secondary\" onclick=\"saveEdits()\">Aenderungen speichern</button>
                 <button class=\"primary\" onclick=\"deployAll()\">Deploy ausfuehren</button>
                 <button onclick=\"window.location.href='/config'\">Konfiguration</button>
@@ -859,6 +862,50 @@ async function reloadData() {
     document.querySelectorAll('datalist').forEach(n => n.remove());
     document.body.insertAdjacentHTML('beforeend', dlSender + dlCustomer + dlTitle);
     status(`Bereit. ${openCount} offene Eintraege, ${shownCount} angezeigt.`);
+    await refreshScanStatus();
+}
+
+async function refreshScanStatus() {
+    const res = await fetch('/api/scan-status');
+    const payload = await res.json();
+    if (!res.ok) {
+        return;
+    }
+    if (payload.running) {
+        status('Scan laeuft gerade im Hintergrund...');
+        return;
+    }
+    if (typeof payload.last_exit_code === 'number') {
+        if (payload.last_exit_code === 0) {
+            status('Letzter Scan erfolgreich abgeschlossen.', 'ok');
+        } else {
+            status(`Letzter Scan fehlgeschlagen (exit=${payload.last_exit_code}).`, 'err');
+        }
+    }
+}
+
+async function triggerScan() {
+    status('Starte Scan...');
+    const res = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    });
+    const payload = await res.json();
+
+    if (!res.ok) {
+        const errors = (payload.errors || []).join(' | ');
+        status(errors || payload.error || 'Scan konnte nicht gestartet werden.', 'err');
+        return;
+    }
+
+    if (payload.running) {
+        status('Ein Scan laeuft bereits.', 'warn');
+        return;
+    }
+
+    status('Scan gestartet. Ergebnis erscheint nach Abschluss im Status.', 'ok');
+    setTimeout(reloadData, 2000);
 }
 
 async function saveEdits() {
@@ -926,6 +973,7 @@ async function deployRow(id) {
 }
 
 reloadData();
+setInterval(refreshScanStatus, 4000);
 </script>
 </body>
 </html>
@@ -1211,6 +1259,10 @@ class Handler(BaseHTTPRequestHandler):
     store: ReviewStore
     auth: PasswordAuth
     config_path: Path
+    scan_lock = threading.Lock()
+    scan_proc: Optional[subprocess.Popen[bytes]] = None
+    scan_last_exit_code: Optional[int] = None
+    scan_last_finished_at: float = 0.0
 
     def log_message(self, fmt: str, *args: object) -> None:
         return
@@ -1311,6 +1363,63 @@ class Handler(BaseHTTPRequestHandler):
             p = self.config_path.parent / p
         return p.resolve()
 
+    def _build_scan_command(self, config: dict[str, Any]) -> tuple[list[str], Path]:
+        service = get_section(config, "service")
+        project_dir_raw = str(service.get("project_dir", "")).strip()
+        project_dir = Path(project_dir_raw).expanduser() if project_dir_raw else self.config_path.parent
+        if not project_dir.is_absolute():
+            project_dir = self.config_path.parent / project_dir
+        project_dir = project_dir.resolve()
+
+        input_path = str(service.get("input", "")).strip()
+        if not input_path:
+            raise ValueError("service.input is required to run scan")
+
+        field_aliases_file = str(service.get("field_aliases_file", "")).strip() or "field_aliases.json"
+        python_bin = str(service.get("python", "")).strip() or sys.executable
+        model = str(service.get("model", "")).strip()
+        output = str(service.get("output", "")).strip()
+        extra_args_raw = service.get("organize_extra_args", [])
+        extra_args = [str(v) for v in extra_args_raw] if isinstance(extra_args_raw, list) else []
+
+        cmd = [
+            python_bin,
+            str(project_dir / "organize.py"),
+            "--input",
+            input_path,
+            "--dry-run",
+            "--field-aliases-file",
+            field_aliases_file,
+        ]
+        if model:
+            cmd.extend(["--model", model])
+        if output:
+            cmd.extend(["--output-root", output])
+        cmd.extend(extra_args)
+        return cmd, project_dir
+
+    def _scan_status_payload(self) -> dict[str, Any]:
+        with self.scan_lock:
+            proc = self.scan_proc
+            if proc is not None:
+                rc = proc.poll()
+                if rc is None:
+                    return {
+                        "running": True,
+                        "pid": proc.pid,
+                        "last_exit_code": self.scan_last_exit_code,
+                        "last_finished_at": self.scan_last_finished_at,
+                    }
+                self.scan_last_exit_code = rc
+                self.scan_last_finished_at = time.time()
+                self.scan_proc = None
+
+            return {
+                "running": False,
+                "last_exit_code": self.scan_last_exit_code,
+                "last_finished_at": self.scan_last_finished_at,
+            }
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
 
@@ -1340,6 +1449,12 @@ class Handler(BaseHTTPRequestHandler):
             if not self._require_auth(is_api=True):
                 return
             self._json_response(self.store.list_entries())
+            return
+
+        if parsed.path == "/api/scan-status":
+            if not self._require_auth(is_api=True):
+                return
+            self._json_response(self._scan_status_payload())
             return
 
         if parsed.path == "/api/config":
@@ -1438,6 +1553,35 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/deploy":
             rows = payload.get("rows", []) if isinstance(payload.get("rows"), list) else []
             self._json_response(self.store.deploy(rows))
+            return
+
+        if parsed.path == "/api/scan":
+            status_payload = self._scan_status_payload()
+            if status_payload.get("running"):
+                self._json_response(status_payload)
+                return
+
+            config, load_errors = self._load_runtime_config()
+            if load_errors:
+                self._json_response({"error": "config_load_failed", "errors": load_errors}, status=500)
+                return
+
+            try:
+                cmd, project_dir = self._build_scan_command(config)
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=str(project_dir),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception as exc:
+                self._json_response({"error": f"scan_start_failed: {exc}"}, status=500)
+                return
+
+            with self.scan_lock:
+                self.scan_proc = proc
+
+            self._json_response({"ok": True, "running": False, "pid": proc.pid})
             return
 
         if parsed.path == "/api/config":
