@@ -1070,8 +1070,27 @@ CONFIG_PAGE = """<!doctype html>
                 </div>
 
                 <div class=\"field\">
+                    <label for=\"schedule-mode\">Scheduler-Modus (service.schedule_mode)</label>
+                    <select id=\"schedule-mode\">
+                        <option value=\"interval\">interval</option>
+                        <option value=\"inbox-trigger\">inbox-trigger</option>
+                        <option value=\"daily\">daily</option>
+                    </select>
+                </div>
+
+                <div class=\"field\">
                     <label for=\"interval\">Scan-Intervall Sekunden (service.interval_seconds)</label>
                     <input id=\"interval\" type=\"number\" min=\"30\" step=\"1\" placeholder=\"300\" />
+                </div>
+
+                <div class=\"field\">
+                    <label for=\"daily-time\">Taegliche Startzeit (service.daily_time, HH:MM)</label>
+                    <input id=\"daily-time\" placeholder=\"02:00\" />
+                </div>
+
+                <div class=\"field\">
+                    <label for=\"inbox-poll\">Inbox Poll Sekunden (service.inbox_poll_seconds)</label>
+                    <input id=\"inbox-poll\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"2\" />
                 </div>
 
                 <div class=\"field\">
@@ -1120,7 +1139,10 @@ async function loadConfig() {
     byId('input').value = service.input || '';
     byId('output').value = service.output || '';
     byId('model').value = service.model || '';
+    byId('schedule-mode').value = service.schedule_mode || 'interval';
     byId('interval').value = service.interval_seconds || 300;
+    byId('daily-time').value = service.daily_time || '02:00';
+    byId('inbox-poll').value = service.inbox_poll_seconds || 2;
     byId('new-password').value = '';
     byId('new-password-confirm').value = '';
     byId('meta').textContent = `Config-Datei: ${payload.config_path} | Passwortdatei: ${payload.auth_password_file || '-'}`;
@@ -1136,7 +1158,10 @@ async function saveConfig() {
             input: byId('input').value,
             output: byId('output').value,
             model: byId('model').value,
-            interval_seconds: byId('interval').value
+            schedule_mode: byId('schedule-mode').value,
+            interval_seconds: byId('interval').value,
+            daily_time: byId('daily-time').value,
+            inbox_poll_seconds: byId('inbox-poll').value
         },
         auth: {
             new_password: newPassword,
@@ -1473,7 +1498,10 @@ class Handler(BaseHTTPRequestHandler):
                         "input": str(service.get("input", "")).strip(),
                         "output": str(service.get("output", "")).strip(),
                         "model": str(service.get("model", "")).strip(),
+                        "schedule_mode": str(service.get("schedule_mode", "interval")).strip() or "interval",
                         "interval_seconds": int(service.get("interval_seconds", 300) or 300),
+                        "daily_time": str(service.get("daily_time", "02:00")).strip() or "02:00",
+                        "inbox_poll_seconds": int(service.get("inbox_poll_seconds", 2) or 2),
                     },
                 }
             )
@@ -1590,7 +1618,10 @@ class Handler(BaseHTTPRequestHandler):
             input_path = str(service_payload.get("input", "")).strip()
             output_path = str(service_payload.get("output", "")).strip()
             model = str(service_payload.get("model", "")).strip()
+            schedule_mode = str(service_payload.get("schedule_mode", "interval")).strip().lower() or "interval"
             interval_raw = str(service_payload.get("interval_seconds", "")).strip()
+            daily_time = str(service_payload.get("daily_time", "02:00")).strip() or "02:00"
+            inbox_poll_raw = str(service_payload.get("inbox_poll_seconds", "2")).strip() or "2"
             new_password = str(auth_payload.get("new_password", ""))
             new_password_confirm = str(auth_payload.get("new_password_confirm", ""))
 
@@ -1606,6 +1637,20 @@ class Handler(BaseHTTPRequestHandler):
 
             if interval < 30:
                 self._json_response({"error": "service.interval_seconds must be >= 30"}, status=400)
+                return
+
+            try:
+                inbox_poll_seconds = int(inbox_poll_raw)
+            except ValueError:
+                self._json_response({"error": "service.inbox_poll_seconds must be an integer"}, status=400)
+                return
+
+            if inbox_poll_seconds < 1:
+                self._json_response({"error": "service.inbox_poll_seconds must be >= 1"}, status=400)
+                return
+
+            if schedule_mode not in {"interval", "inbox-trigger", "daily"}:
+                self._json_response({"error": "service.schedule_mode must be one of: interval, inbox-trigger, daily"}, status=400)
                 return
 
             if new_password or new_password_confirm:
@@ -1630,7 +1675,10 @@ class Handler(BaseHTTPRequestHandler):
             service["input"] = input_path
             service["output"] = output_path
             service["model"] = model
+            service["schedule_mode"] = schedule_mode
             service["interval_seconds"] = interval
+            service["daily_time"] = daily_time
+            service["inbox_poll_seconds"] = inbox_poll_seconds
 
             review = config.get("review_web")
             if not isinstance(review, dict):

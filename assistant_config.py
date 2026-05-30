@@ -67,7 +67,10 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         errors.append("service must be an object")
     if isinstance(service, dict):
         _validate_host_port(errors, service, scope="service")
+        _validate_enum(errors, service, "schedule_mode", {"interval", "inbox-trigger", "daily"}, scope="service")
         _validate_positive_int(errors, service, "interval_seconds", scope="service", min_value=30)
+        _validate_positive_int(errors, service, "inbox_poll_seconds", scope="service", min_value=1)
+        _validate_daily_time(errors, service, "daily_time", scope="service")
         _validate_positive_int(errors, service, "session_ttl_seconds", scope="service", min_value=300)
         _validate_str(errors, service, "input", scope="service")
         _validate_str(errors, service, "output", scope="service")
@@ -129,6 +132,34 @@ def _validate_str_list(errors: list[str], section: dict[str, Any], key: str, sco
         return
     if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
         errors.append(f"{scope}.{key} must be a list of strings")
+
+
+def _validate_enum(errors: list[str], section: dict[str, Any], key: str, allowed: set[str], scope: str) -> None:
+    value = section.get(key)
+    if value is None:
+        return
+    if not isinstance(value, str):
+        errors.append(f"{scope}.{key} must be a string")
+        return
+    if value not in allowed:
+        errors.append(f"{scope}.{key} must be one of: {', '.join(sorted(allowed))}")
+
+
+def _validate_daily_time(errors: list[str], section: dict[str, Any], key: str, scope: str) -> None:
+    value = section.get(key)
+    if value is None:
+        return
+    if not isinstance(value, str):
+        errors.append(f"{scope}.{key} must be a string")
+        return
+    parts = value.split(":")
+    if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        errors.append(f"{scope}.{key} must match HH:MM")
+        return
+    hour = int(parts[0])
+    minute = int(parts[1])
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        errors.append(f"{scope}.{key} must be between 00:00 and 23:59")
 
 
 def get_section(config: dict[str, Any], key: str) -> dict[str, Any]:

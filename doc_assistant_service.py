@@ -36,7 +36,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", default=None, help="Inbox directory for organize.py")
     parser.add_argument("--output", default=None, help="Output base directory for organize.py (_sorted/_review)")
     parser.add_argument("--model", default=None, help="Ollama model for organize.py (optional)")
+    parser.add_argument(
+        "--schedule-mode",
+        default=None,
+        choices=["interval", "inbox-trigger", "daily"],
+        help="Scheduler mode: interval, inbox-trigger, or daily",
+    )
     parser.add_argument("--interval-seconds", type=int, default=None, help="Seconds between dry-run scans")
+    parser.add_argument("--daily-time", default=None, help="Daily run time in local time (HH:MM)")
+    parser.add_argument("--inbox-poll-seconds", type=int, default=None, help="Inbox polling interval for inbox-trigger mode")
     parser.add_argument("--host", default=None, help="Host for review_web.py")
     parser.add_argument("--port", type=int, default=None, help="Port for review_web.py")
     parser.add_argument("--state-file", default=None, help="State file for review_web.py")
@@ -53,6 +61,55 @@ def parse_args() -> argparse.Namespace:
         help="Extra argument for organize.py (repeatable, e.g. --organize-extra-arg=--ollama-timeout --organize-extra-arg=1800)",
     )
     return parser.parse_args()
+
+
+def parse_daily_time(value: str) -> tuple[int, int]:
+    raw = str(value or "").strip()
+    parts = raw.split(":")
+    if len(parts) != 2:
+        raise ValueError("daily-time must be HH:MM")
+    hour = int(parts[0])
+    minute = int(parts[1])
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        raise ValueError("daily-time must be between 00:00 and 23:59")
+    return hour, minute
+
+
+def next_daily_run_ts(now_ts: float, hour: int, minute: int) -> float:
+    from datetime import timedelta
+
+    now = datetime.fromtimestamp(now_ts)
+    candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if candidate.timestamp() <= now_ts:
+        candidate = candidate + timedelta(days=1)
+    return candidate.timestamp()
+
+
+def inbox_snapshot(path: Path) -> dict[str, tuple[int, int]]:
+    snapshot: dict[str, tuple[int, int]] = {}
+    if not path.exists() or not path.is_dir():
+        return snapshot
+    for item in path.rglob("*"):
+        if not item.is_file():
+            continue
+        try:
+            st = item.stat()
+        except OSError:
+            continue
+        key = str(item.relative_to(path))
+        snapshot[key] = (int(st.st_size), int(st.st_mtime_ns))
+    return snapshot
+
+
+def inbox_has_new_or_changed(prev: dict[str, tuple[int, int]], curr: dict[str, tuple[int, int]]) -> bool:
+    if not prev and not curr:
+        return False
+    for key, value in curr.items():
+        if key not in prev:
+            return True
+        if prev[key] != value:
+            return True
+    return False
 
 
 def build_review_cmd(args: argparse.Namespace, project_dir: Path) -> list[str]:
@@ -143,7 +200,10 @@ def main() -> int:
     args.input = str(pick(args.input, section, "input", "")).strip()
     args.output = str(pick(args.output, section, "output", "")).strip()
     args.model = str(pick(args.model, section, "model", "")).strip()
+    args.schedule_mode = str(pick(args.schedule_mode, section, "schedule_mode", "interval")).strip().lower() or "interval"
     args.interval_seconds = int(pick(args.interval_seconds, section, "interval_seconds", 300))
+    args.daily_time = str(pick(args.daily_time, section, "daily_time", "02:00")).strip() or "02:00"
+    args.inbox_poll_seconds = int(pick(args.inbox_poll_seconds, section, "inbox_poll_seconds", 2))
     args.host = str(pick(args.host, section, "host", "127.0.0.1")).strip()
     args.port = int(pick(args.port, section, "port", 8449))
     args.state_file = str(pick(args.state_file, section, "state_file", "review_state.json")).strip()
@@ -165,6 +225,20 @@ def main() -> int:
         emit("interval-seconds too low; using minimum of 30")
         args.interval_seconds = 30
 
+    if args.inbox_poll_seconds < 1:
+        emit("inbox-poll-seconds too low; using minimum of 1")
+        args.inbox_poll_seconds = 1
+
+    if args.schedule_mode not in {"interval", "inbox-trigger", "daily"}:
+        emit(f"[ERROR] Invalid schedule-mode: {args.schedule_mode}")
+        return 2
+
+    try:
+        daily_hour, daily_minute = parse_daily_time(args.daily_time)
+    except Exception as exc:
+        emit(f"[ERROR] Invalid daily-time: {exc}")
+        return 2
+
     project_dir = Path(args.project_dir).expanduser().resolve() if args.project_dir else default_project_dir
     if not (project_dir / "organize.py").exists() or not (project_dir / "review_web.py").exists():
         emit(f"[ERROR] project-dir invalid: {project_dir}")
@@ -183,10 +257,23 @@ def main() -> int:
 
     emit(f"Service start. project_dir={project_dir}")
     emit(f"Web UI: http://{args.host}:{args.port}")
-    emit(f"Scan interval: {args.interval_seconds}s")
+    emit(f"Schedule mode: {args.schedule_mode}")
+    if args.schedule_mode == "interval":
+        emit(f"Scan interval: {args.interval_seconds}s")
+    elif args.schedule_mode == "inbox-trigger":
+        emit(f"Inbox trigger polling: {args.inbox_poll_seconds}s")
+    else:
+        emit(f"Daily run time: {args.daily_time}")
 
     try:
         next_scan_at = 0.0
+        next_daily_at = next_daily_run_ts(time.time(), daily_hour, daily_minute)
+        last_inbox_snapshot = inbox_snapshot(Path(args.input).expanduser())
+        if args.schedule_mode == "inbox-trigger" and last_inbox_snapshot:
+            emit("Inbox contains files at startup, running initial dry-run scan.")
+            run_organize_once(args, project_dir)
+            last_inbox_snapshot = inbox_snapshot(Path(args.input).expanduser())
+
         while not stop["value"]:
             if review_proc is None or review_proc.poll() is not None:
                 if review_proc is not None:
@@ -196,11 +283,30 @@ def main() -> int:
                 review_proc = subprocess.Popen(review_cmd, cwd=str(project_dir))
 
             now = time.time()
-            if now >= next_scan_at:
-                run_organize_once(args, project_dir)
-                next_scan_at = now + float(args.interval_seconds)
+            if args.schedule_mode == "interval":
+                if now >= next_scan_at:
+                    run_organize_once(args, project_dir)
+                    next_scan_at = now + float(args.interval_seconds)
+                time.sleep(1.0)
+                continue
 
-            time.sleep(1.0)
+            if args.schedule_mode == "daily":
+                if now >= next_daily_at:
+                    run_organize_once(args, project_dir)
+                    next_daily_at = next_daily_run_ts(now + 1, daily_hour, daily_minute)
+                time.sleep(1.0)
+                continue
+
+            inbox_path = Path(args.input).expanduser()
+            if not inbox_path.is_absolute():
+                inbox_path = (project_dir / inbox_path).resolve()
+            current_snapshot = inbox_snapshot(inbox_path)
+            if inbox_has_new_or_changed(last_inbox_snapshot, current_snapshot):
+                emit("Inbox change detected, running dry-run scan.")
+                run_organize_once(args, project_dir)
+                current_snapshot = inbox_snapshot(inbox_path)
+            last_inbox_snapshot = current_snapshot
+            time.sleep(float(args.inbox_poll_seconds))
     finally:
         terminate_process(review_proc, "review_web.py")
 

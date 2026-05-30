@@ -81,7 +81,39 @@ Fuer den Dienst `doc_assistant_service.py` sind vor allem diese Werte relevant:
 - `service.input`: Inbox-Pfad
 - `service.output`: Basis fuer `_sorted` und `_review`
 - `service.model`: Ollama-Modell
+- `service.schedule_mode`: `interval`, `inbox-trigger` oder `daily`
 - `service.interval_seconds`: Scan-Intervall
+- `service.daily_time`: Uhrzeit fuer den taeglichen Lauf (`HH:MM`, nur bei `daily`)
+- `service.inbox_poll_seconds`: Polling-Intervall fuer Inbox-Trigger (nur bei `inbox-trigger`)
+
+Scheduler-Modi:
+
+1. `interval` (wie bisher): alle `service.interval_seconds` Sekunden
+2. `inbox-trigger`: prueft die Inbox dauerhaft und startet bei neuen/geaenderten Dateien sofort
+3. `daily`: startet einmal pro Tag zur konfigurierten `service.daily_time`
+
+Beispiele:
+
+```json
+"service": {
+  "schedule_mode": "interval",
+  "interval_seconds": 300
+}
+```
+
+```json
+"service": {
+  "schedule_mode": "inbox-trigger",
+  "inbox_poll_seconds": 2
+}
+```
+
+```json
+"service": {
+  "schedule_mode": "daily",
+  "daily_time": "06:30"
+}
+```
 
 Validierung:
 
@@ -276,7 +308,7 @@ Pfade konfigurieren:
 
 Hinweis zur Web-Konfigurationsseite:
 
-- speichert in `assistant_config.json` (service.input/output/model/interval_seconds)
+- speichert in `assistant_config.json` (service.input/output/model/schedule_mode/interval_seconds/daily_time/inbox_poll_seconds)
 - Web-Passwort kann dort ebenfalls geaendert werden (wird in die Passwortdatei geschrieben)
 - danach Dienst neu starten, damit die neuen Werte aktiv werden:
 
