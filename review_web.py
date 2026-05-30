@@ -2242,6 +2242,21 @@ class Handler(BaseHTTPRequestHandler):
         if not self._require_auth(is_api=True):
             return
 
+
+        if parsed.path == "/api/delete-entry":
+            entry_id = str(payload.get("id", "")).strip()
+            if not entry_id:
+                self._json_response({"ok": False, "error": "Kein Eintrag angegeben"}, status=400)
+                return
+            with self.store.lock:
+                if entry_id in self.store.state["entries"]:
+                    del self.store.state["entries"][entry_id]
+                    self.store._save_state()
+                    self._json_response({"ok": True})
+                else:
+                    self._json_response({"ok": False, "error": "Eintrag nicht gefunden"}, status=404)
+            return
+
         if parsed.path == "/api/save-edits":
             rows = payload.get("rows", []) if isinstance(payload.get("rows"), list) else []
             self._json_response(self.store.save_edits(rows))
