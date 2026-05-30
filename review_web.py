@@ -511,23 +511,18 @@ class ReviewStore:
             self._save_state()
             return {"updated": updated}
 
-    def _learn_aliases(self, entry: dict[str, Any], learn_fields: dict[str, bool]) -> int:
+    def _learn_aliases(self, entry: dict[str, Any], learn_fields: dict[str, bool] = None) -> int:
         count = 0
         default = entry.get("default", {})
         edited = entry.get("edited", {})
-
         for field in ("sender", "category", "customer_number", "title"):
-            if not bool(learn_fields.get(field, False)):
-                continue
             src_value = str(default.get(field, "")).strip()
             dst_value = str(edited.get(field, "")).strip()
             if not src_value or not dst_value or src_value == dst_value:
                 continue
-
             key = slugify(src_value)
             self.aliases.setdefault(field, {})[key] = dst_value
             count += 1
-
         return count
 
     def deploy(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -558,7 +553,7 @@ class ReviewStore:
                     entry["edited"][field] = value
 
                 self._remember_values(entry["edited"])
-                learned += self._learn_aliases(entry, learn_fields)
+                learned += self._learn_aliases(entry)
 
                 src = Path(entry["source"])
                 if not src.exists():
@@ -850,7 +845,44 @@ function rowMarkup(row) {
     const statusLabel = uiStatusLabel(row.status);
     const deployDisabled = row.status === 'deployed' ? 'disabled' : '';
 
-    return `<tr data-id=\"${esc(row.id)}\">
+    return `<tr data-id="${esc(row.id)}">
+        <td class="col-file">
+            <a class="filelink" target="_blank" href="/file?id=${encodeURIComponent(row.id)}">${esc(row.source_name)}</a>
+            <div class="mini">${esc(row.source_preview || row.source)}</div>
+            <div>${badge}</div>
+            ${missing}
+        </td>
+        <td><span class="pill ${statusClass}">${esc(statusLabel)}</span></td>
+        <td>${Number(row.confidence || 0).toFixed(2)}</td>
+        <td>
+            <input list="sender-mem" name="sender" value="${esc(row.edited.sender || '')}" />
+            <div class="mini">LLM: ${esc(row.default.sender || '')}</div>
+        </td>
+        <td>
+            <select name="category">${categoryOptions(row.edited.category || 'SONSTIGES')}</select>
+            <div class="mini">LLM: ${esc(row.default.category || '')}</div>
+        </td>
+        <td>
+            <input list="customer_number-mem" name="customer_number" value="${esc(row.edited.customer_number || '')}" />
+            <div class="mini">LLM: ${esc(row.default.customer_number || '')}</div>
+        </td>
+        <td>
+            <input list="title-mem" name="title" value="${esc(row.edited.title || '')}" />
+            <div class="mini">LLM: ${esc(row.default.title || '')}</div>
+        </td>
+        <td>
+            <input name="date" value="${esc(row.edited.date || '')}" placeholder="YYYY-MM-DD" />
+            <div class="mini">LLM: ${esc(row.default.date || '')}</div>
+        </td>
+        <td class="mini">${esc(row.target_preview || '')}</td>
+        <td>
+            <div class="row-actions">
+                <button onclick="saveRow('${esc(row.id)}')" ${deployDisabled}>Speichern</button>
+                <button class="primary" onclick="deployRow('${esc(row.id)}')" ${deployDisabled}>Ausführen</button>
+                <button class="danger" onclick="deleteRow('${esc(row.id)}')">Löschen</button>
+            </div>
+        </td>
+    </tr>`;
         <td class=\"col-file\">
             <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
             <div class=\"mini\">${esc(row.source_preview || row.source)}</div>
@@ -916,22 +948,21 @@ async function deleteRow(id) {
 }
 
 function rowPayload(tr) {
-    return {
-        id: tr.dataset.id,
-        edited: {
-            sender: tr.querySelector('[name="sender"]').value,
-            category: tr.querySelector('[name="category"]').value,
-            customer_number: tr.querySelector('[name="customer_number"]').value,
-            title: tr.querySelector('[name="title"]').value,
-            date: tr.querySelector('[name="date"]').value,
-        },
-        learn: {
-            sender: tr.querySelector('[name="learn_sender"]').checked,
-            category: tr.querySelector('[name="learn_category"]').checked,
-            customer_number: tr.querySelector('[name="learn_customer_number"]').checked,
-            title: tr.querySelector('[name="learn_title"]').checked,
-        }
+    const edited = {
+        sender: tr.querySelector('[name="sender"]').value,
+        category: tr.querySelector('[name="category"]').value,
+        customer_number: tr.querySelector('[name="customer_number"]').value,
+        title: tr.querySelector('[name="title"]').value,
+        date: tr.querySelector('[name="date"]').value,
     };
+    const learn = {};
+    for (const field of ["sender", "category", "customer_number", "title"]) {
+        const llm = tr.querySelector(`.mini:contains('LLM:')`).textContent.split('LLM:')[1]?.trim() || "";
+        if (edited[field] && edited[field] !== llm) {
+            learn[field] = true;
+        }
+    }
+    return { id: tr.dataset.id, edited, learn };
 }
 
 function collectRows() {
