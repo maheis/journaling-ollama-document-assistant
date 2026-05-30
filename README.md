@@ -312,6 +312,7 @@ Hinweis zur Web-Konfigurationsseite:
 - Web-Passwort kann dort ebenfalls geaendert werden (wird in die Passwortdatei geschrieben)
 - Update kann dort geprueft und gestartet werden (`Auf Update pruefen`, `Update durchfuehren`)
 - `Update durchfuehren` ist nur aktiv, wenn wirklich ein neuer Stand im Git-Remote verfuegbar ist
+- Dienst kann dort direkt neu gestartet werden (`Dienst neu starten`)
 - danach Dienst neu starten, damit die neuen Werte aktiv werden:
 
 ```bash

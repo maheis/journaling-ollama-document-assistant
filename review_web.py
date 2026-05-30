@@ -1266,6 +1266,7 @@ CONFIG_PAGE = """<!doctype html>
                 <div class=\"actions\">
                     <button onclick=\"checkForUpdate()\">Auf Update prüfen</button>
                     <button id=\"run-update-btn\" class=\"primary\" onclick=\"runUpdate()\" disabled>Update durchführen</button>
+                    <button onclick=\"restartService()\">Dienst neu starten</button>
                 </div>
             </div>
 
@@ -1351,6 +1352,22 @@ async function runUpdate() {
         status(payload.message || 'Bereits aktuell.', 'ok');
     }
     await checkForUpdate();
+}
+
+async function restartService() {
+    status('Starte Dienst neu...');
+    const res = await fetch('/api/service-restart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    });
+    const payload = await res.json();
+    if (!res.ok || payload.ok === false) {
+        const details = payload.details ? ` (${payload.details})` : '';
+        status((payload.message || 'Dienstneustart fehlgeschlagen') + details, 'err');
+        return;
+    }
+    status(payload.message || 'Dienst wurde neu gestartet.', 'ok');
 }
 
 async function loadConfig() {
@@ -1651,6 +1668,40 @@ class Handler(BaseHTTPRequestHandler):
             text=True,
             timeout=timeout,
         )
+
+    def _restart_user_service(self) -> dict[str, Any]:
+        if shutil.which("systemctl") is None:
+            return {
+                "ok": False,
+                "message": "systemctl nicht gefunden",
+            }
+
+        cmd = ["systemctl", "--user", "restart", "ollama-document-assistant.service"]
+        try:
+            proc = subprocess.run(
+                cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except Exception as exc:
+            return {
+                "ok": False,
+                "message": f"Dienstneustart fehlgeschlagen: {exc}",
+            }
+
+        if proc.returncode != 0:
+            return {
+                "ok": False,
+                "message": "Dienstneustart fehlgeschlagen",
+                "details": (proc.stderr or proc.stdout).strip(),
+            }
+
+        return {
+            "ok": True,
+            "message": "Dienst wurde neu gestartet",
+        }
 
     def _update_status_payload(self) -> dict[str, Any]:
         config, load_errors = self._load_runtime_config()
@@ -2084,6 +2135,11 @@ class Handler(BaseHTTPRequestHandler):
                         "details": pull.stdout.strip(),
                     }
                 )
+            return
+
+        if parsed.path == "/api/service-restart":
+            result = self._restart_user_service()
+            self._json_response(result, status=200 if result.get("ok") else 500)
             return
 
         if parsed.path == "/api/config":
