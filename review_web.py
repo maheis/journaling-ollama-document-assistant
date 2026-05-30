@@ -747,51 +747,7 @@ HTML_PAGE = """<!doctype html>
                 <button id=\"stop-scan-btn\" class=\"danger\" onclick=\"stopScan()\" disabled>Überprüfung stoppen</button>
                 <button class=\"secondary\" onclick=\"saveEdits()\">Änderungen speichern</button>
                 <button class=\"primary\" onclick=\"deployAll()\">Ausführung starten</button>
-                <button onclick=\"window.location.href='/config'\">Konfiguration</button>
-
-                <div class="section">
-                    <h2>Ollama</h2>
-                    <div class="grid">
-                        <div class="field">
-                            <label for="ollama-timeout">Ollama Timeout Sekunden</label>
-                            <input id="ollama-timeout" type="number" min="1" step="1" placeholder="1800" />
-                        </div>
-                        <div class="field">
-                            <label for="ollama-retries">Ollama Retries</label>
-                            <input id="ollama-retries" type="number" min="0" step="1" placeholder="0" />
-                        </div>
-                        <div class="field">
-                            <label for="max-text-chars">Max. Textzeichen pro Anfrage</label>
-                            <input id="max-text-chars" type="number" min="100" step="100" placeholder="6000" />
-                        </div>
-                        <div class="field">
-                            <label for="process-nice">Process Nice</label>
-                            <input id="process-nice" type="number" min="0" step="1" placeholder="5" />
-                        </div>
-                        <div class="field">
-                            <label for="max-cpu-threads">Max CPU Threads (0 = kein Limit)</label>
-                            <input id="max-cpu-threads" type="number" min="0" step="1" placeholder="4" />
-                        </div>
-                        <div class="field">
-                            <label for="ollama-num-thread">Ollama Num Thread (0 = Default)</label>
-                            <input id="ollama-num-thread" type="number" min="0" step="1" placeholder="4" />
-                        </div>
-                        <div class="field">
-                            <label for="sleep-between-files">Pause zwischen Dateien (Sekunden)</label>
-                            <input id="sleep-between-files" type="number" min="0" step="0.1" placeholder="0.4" />
-                        </div>
-                    </div>
-                    <div class="grid">
-                        <div class="field wide">
-                            <label for="ollama-version-info">Ollama-Version</label>
-                            <input id="ollama-version-info" readonly value="Noch nicht geprüft" />
-                        </div>
-                    </div>
-                    <div class="actions">
-                        <button onclick="checkOllamaVersion()" type="button">Ollama-Version prüfen</button>
-                        <button id="run-ollama-update-btn" class="primary" onclick="runOllamaUpdate()" type="button" disabled>Ollama Update durchführen</button>
-                    </div>
-                </div>
+                <button onclick="window.location.href='/config'">Konfiguration</button>
     const el = document.getElementById('status');
     el.textContent = text;
     el.className = 'status ' + cls;
