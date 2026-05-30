@@ -988,22 +988,25 @@ CONFIG_PAGE = """<!doctype html>
     <title>Konfiguration - Document Review Deploy</title>
     <style>
         :root {
-            --bg: #f5f4ef;
-            --card: #fffdf6;
-            --ink: #1d1f24;
-            --muted: #6d727d;
-            --accent: #0f766e;
-            --line: #dfdccf;
-            --ok: #166534;
-            --warn: #92400e;
-            --err: #b91c1c;
+            --bg: #0f1117;
+            --bg2: #151926;
+            --card: #1c2233;
+            --card2: #1a2030;
+            --ink: #e8edf7;
+            --muted: #9aa6bd;
+            --accent: #23c4a8;
+            --line: #2b3449;
+            --ok: #55d187;
+            --warn: #f7b955;
+            --err: #ff6b6b;
+            --field: #111827;
         }
         * { box-sizing: border-box; }
         body {
             margin: 0;
             font-family: \"IBM Plex Sans\", \"Segoe UI\", sans-serif;
             color: var(--ink);
-            background: radial-gradient(circle at top right, #ebe7d6 0%, var(--bg) 40%), var(--bg);
+            background: radial-gradient(circle at top right, #20263a 0%, var(--bg) 42%), var(--bg2);
         }
         .wrap { max-width: 900px; margin: 0 auto; padding: 20px; }
         .card {
@@ -1011,33 +1014,49 @@ CONFIG_PAGE = """<!doctype html>
             border: 1px solid var(--line);
             border-radius: 12px;
             padding: 16px;
-            box-shadow: 0 8px 30px rgba(30, 24, 10, 0.06);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
         }
         h1 { margin: 0 0 8px 0; font-size: 24px; }
         p.meta { margin: 0 0 14px 0; color: var(--muted); font-size: 13px; }
+        .section {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 12px;
+            margin-top: 12px;
+            background: var(--card2);
+        }
+        .section h2 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            letter-spacing: 0.2px;
+            color: #c4d1eb;
+            text-transform: uppercase;
+        }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .field { display: flex; flex-direction: column; gap: 6px; }
         .field.wide { grid-column: 1 / -1; }
-        label { font-size: 13px; color: #374151; font-weight: 600; }
-        input {
+        label { font-size: 13px; color: #cad5ea; font-weight: 600; }
+        input, select {
             width: 100%;
-            border: 1px solid #d4cfbd;
+            border: 1px solid #3a445f;
             border-radius: 8px;
             padding: 9px 10px;
             font-size: 14px;
-            background: white;
+            background: var(--field);
+            color: var(--ink);
         }
+        input::placeholder { color: #7f8aa3; }
         .actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
         button {
             border: 1px solid var(--line);
-            background: white;
+            background: #1a2131;
             color: var(--ink);
             border-radius: 10px;
             padding: 9px 12px;
             cursor: pointer;
             font-weight: 600;
         }
-        button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+        button.primary { background: var(--accent); border-color: var(--accent); color: #071a18; }
         .status { margin-top: 12px; font-size: 14px; min-height: 18px; }
         .status.ok { color: var(--ok); }
         .status.warn { color: var(--warn); }
@@ -1053,54 +1072,67 @@ CONFIG_PAGE = """<!doctype html>
             <h1>Konfiguration</h1>
             <p class=\"meta\" id=\"meta\"></p>
 
-            <div class=\"grid\">
-                <div class=\"field wide\">
-                    <label for=\"input\">Inbox-Pfad (service.input)</label>
-                    <input id=\"input\" placeholder=\"./inbox\" />
-                </div>
+            <div class=\"section\">
+                <h2>Dienstpfade</h2>
+                <div class=\"grid\">
+                    <div class=\"field wide\">
+                        <label for=\"input\">Inbox-Pfad (service.input)</label>
+                        <input id=\"input\" placeholder=\"./inbox\" />
+                    </div>
 
-                <div class=\"field wide\">
-                    <label for=\"output\">Output-Pfad (service.output)</label>
-                    <input id=\"output\" placeholder=\"./output\" />
+                    <div class=\"field wide\">
+                        <label for=\"output\">Output-Pfad (service.output)</label>
+                        <input id=\"output\" placeholder=\"./output\" />
+                    </div>
                 </div>
+            </div>
 
-                <div class=\"field\">
-                    <label for=\"model\">Modell (service.model)</label>
-                    <input id=\"model\" placeholder=\"qwen2.5:7b-instruct\" />
+            <div class=\"section\">
+                <h2>Scan und Scheduler</h2>
+                <div class=\"grid\">
+                    <div class=\"field\">
+                        <label for=\"model\">Modell (service.model)</label>
+                        <input id=\"model\" placeholder=\"qwen2.5:7b-instruct\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"schedule-mode\">Scheduler-Modus (service.schedule_mode)</label>
+                        <select id=\"schedule-mode\">
+                            <option value=\"interval\">interval</option>
+                            <option value=\"inbox-trigger\">inbox-trigger</option>
+                            <option value=\"daily\">daily</option>
+                        </select>
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"interval\">Scan-Intervall Sekunden (service.interval_seconds)</label>
+                        <input id=\"interval\" type=\"number\" min=\"30\" step=\"1\" placeholder=\"300\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"daily-time\">Taegliche Startzeit (service.daily_time, HH:MM)</label>
+                        <input id=\"daily-time\" placeholder=\"02:00\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"inbox-poll\">Inbox Poll Sekunden (service.inbox_poll_seconds)</label>
+                        <input id=\"inbox-poll\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"2\" />
+                    </div>
                 </div>
+            </div>
 
-                <div class=\"field\">
-                    <label for=\"schedule-mode\">Scheduler-Modus (service.schedule_mode)</label>
-                    <select id=\"schedule-mode\">
-                        <option value=\"interval\">interval</option>
-                        <option value=\"inbox-trigger\">inbox-trigger</option>
-                        <option value=\"daily\">daily</option>
-                    </select>
-                </div>
+            <div class=\"section\">
+                <h2>Sicherheit</h2>
+                <div class=\"grid\">
+                    <div class=\"field\">
+                        <label for=\"new-password\">Neues Web-Passwort</label>
+                        <input id=\"new-password\" type=\"password\" autocomplete=\"new-password\" placeholder=\"leer lassen = unveraendert\" />
+                    </div>
 
-                <div class=\"field\">
-                    <label for=\"interval\">Scan-Intervall Sekunden (service.interval_seconds)</label>
-                    <input id=\"interval\" type=\"number\" min=\"30\" step=\"1\" placeholder=\"300\" />
-                </div>
-
-                <div class=\"field\">
-                    <label for=\"daily-time\">Taegliche Startzeit (service.daily_time, HH:MM)</label>
-                    <input id=\"daily-time\" placeholder=\"02:00\" />
-                </div>
-
-                <div class=\"field\">
-                    <label for=\"inbox-poll\">Inbox Poll Sekunden (service.inbox_poll_seconds)</label>
-                    <input id=\"inbox-poll\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"2\" />
-                </div>
-
-                <div class=\"field\">
-                    <label for=\"new-password\">Neues Web-Passwort</label>
-                    <input id=\"new-password\" type=\"password\" autocomplete=\"new-password\" placeholder=\"leer lassen = unveraendert\" />
-                </div>
-
-                <div class=\"field\">
-                    <label for=\"new-password-confirm\">Neues Passwort bestaetigen</label>
-                    <input id=\"new-password-confirm\" type=\"password\" autocomplete=\"new-password\" placeholder=\"Wiederholen\" />
+                    <div class=\"field\">
+                        <label for=\"new-password-confirm\">Neues Passwort bestaetigen</label>
+                        <input id=\"new-password-confirm\" type=\"password\" autocomplete=\"new-password\" placeholder=\"Wiederholen\" />
+                    </div>
                 </div>
             </div>
 
