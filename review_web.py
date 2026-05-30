@@ -1190,13 +1190,13 @@ CONFIG_PAGE = """<!doctype html>
                     </div>
 
                     <div class=\"field\">
-                        <label for=\"daily-time\">Tägliche Startzeit (service.daily_time, HH:MM)</label>
-                        <input id=\"daily-time\" placeholder=\"02:00\" />
+                        <label for=\"inbox-poll\">Inbox Poll Sekunden (service.inbox_poll_seconds)</label>
+                        <input id=\"inbox-poll\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"2\" />
                     </div>
 
                     <div class=\"field\">
-                        <label for=\"inbox-poll\">Inbox Poll Sekunden (service.inbox_poll_seconds)</label>
-                        <input id=\"inbox-poll\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"2\" />
+                        <label for=\"daily-time\">Tägliche Startzeit (service.daily_time, HH:MM)</label>
+                        <input id=\"daily-time\" placeholder=\"02:00\" />
                     </div>
                 </div>
             </div>
