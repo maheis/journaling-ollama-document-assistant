@@ -672,6 +672,7 @@ HTML_PAGE = """<!doctype html>
                 <button onclick=\"reloadData()\">Neu laden</button>
                 <button class=\"secondary\" onclick=\"saveEdits()\">Aenderungen speichern</button>
                 <button class=\"primary\" onclick=\"deployAll()\">Deploy ausfuehren</button>
+                <button onclick=\"window.location.href='/config'\">Konfiguration</button>
                 <label class="filter-box">
                     Status-Filter
                     <select id="status-filter" onchange="applyFilter()">
@@ -931,6 +932,177 @@ reloadData();
 """
 
 
+CONFIG_PAGE = """<!doctype html>
+<html lang=\"de\">
+<head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>Konfiguration - Document Review Deploy</title>
+    <style>
+        :root {
+            --bg: #f5f4ef;
+            --card: #fffdf6;
+            --ink: #1d1f24;
+            --muted: #6d727d;
+            --accent: #0f766e;
+            --line: #dfdccf;
+            --ok: #166534;
+            --warn: #92400e;
+            --err: #b91c1c;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: \"IBM Plex Sans\", \"Segoe UI\", sans-serif;
+            color: var(--ink);
+            background: radial-gradient(circle at top right, #ebe7d6 0%, var(--bg) 40%), var(--bg);
+        }
+        .wrap { max-width: 900px; margin: 0 auto; padding: 20px; }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 8px 30px rgba(30, 24, 10, 0.06);
+        }
+        h1 { margin: 0 0 8px 0; font-size: 24px; }
+        p.meta { margin: 0 0 14px 0; color: var(--muted); font-size: 13px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .field { display: flex; flex-direction: column; gap: 6px; }
+        .field.wide { grid-column: 1 / -1; }
+        label { font-size: 13px; color: #374151; font-weight: 600; }
+        input {
+            width: 100%;
+            border: 1px solid #d4cfbd;
+            border-radius: 8px;
+            padding: 9px 10px;
+            font-size: 14px;
+            background: white;
+        }
+        .actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+        button {
+            border: 1px solid var(--line);
+            background: white;
+            color: var(--ink);
+            border-radius: 10px;
+            padding: 9px 12px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+        .status { margin-top: 12px; font-size: 14px; min-height: 18px; }
+        .status.ok { color: var(--ok); }
+        .status.warn { color: var(--warn); }
+        .status.err { color: var(--err); }
+        @media (max-width: 760px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class=\"wrap\">
+        <div class=\"card\">
+            <h1>Konfiguration</h1>
+            <p class=\"meta\" id=\"meta\"></p>
+
+            <div class=\"grid\">
+                <div class=\"field wide\">
+                    <label for=\"input\">Inbox-Pfad (service.input)</label>
+                    <input id=\"input\" placeholder=\"./inbox\" />
+                </div>
+
+                <div class=\"field wide\">
+                    <label for=\"output\">Output-Pfad (service.output)</label>
+                    <input id=\"output\" placeholder=\"./output\" />
+                </div>
+
+                <div class=\"field\">
+                    <label for=\"model\">Modell (service.model)</label>
+                    <input id=\"model\" placeholder=\"qwen2.5:7b-instruct\" />
+                </div>
+
+                <div class=\"field\">
+                    <label for=\"interval\">Scan-Intervall Sekunden (service.interval_seconds)</label>
+                    <input id=\"interval\" type=\"number\" min=\"30\" step=\"1\" placeholder=\"300\" />
+                </div>
+            </div>
+
+            <div class=\"actions\">
+                <button onclick=\"loadConfig()\">Neu laden</button>
+                <button class=\"primary\" onclick=\"saveConfig()\">Speichern</button>
+                <button onclick=\"window.location.href='/'\">Zurueck zur Review</button>
+            </div>
+
+            <div class=\"status\" id=\"status\"></div>
+        </div>
+    </div>
+
+<script>
+function status(text, cls = '') {
+    const el = document.getElementById('status');
+    el.textContent = text;
+    el.className = 'status ' + cls;
+}
+
+function byId(id) {
+    return document.getElementById(id);
+}
+
+async function loadConfig() {
+    status('Lade Konfiguration...');
+    const res = await fetch('/api/config');
+    const payload = await res.json();
+
+    if (!res.ok) {
+        status(payload.error || 'Konfiguration konnte nicht geladen werden.', 'err');
+        return;
+    }
+
+    const service = payload.service || {};
+    byId('input').value = service.input || '';
+    byId('output').value = service.output || '';
+    byId('model').value = service.model || '';
+    byId('interval').value = service.interval_seconds || 300;
+    byId('meta').textContent = `Config-Datei: ${payload.config_path}`;
+    status('Konfiguration geladen.', 'ok');
+}
+
+async function saveConfig() {
+    const body = {
+        service: {
+            input: byId('input').value,
+            output: byId('output').value,
+            model: byId('model').value,
+            interval_seconds: byId('interval').value
+        }
+    };
+
+    status('Speichere Konfiguration...');
+    const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    const payload = await res.json();
+
+    if (!res.ok) {
+        const errors = (payload.errors || []).join(' | ');
+        status(errors || payload.error || 'Speichern fehlgeschlagen.', 'err');
+        return;
+    }
+
+    const note = payload.restart_required ? ' Bitte Dienst neu starten.' : '';
+    status('Gespeichert.' + note, 'ok');
+    byId('meta').textContent = `Config-Datei: ${payload.config_path}`;
+}
+
+loadConfig();
+</script>
+</body>
+</html>
+"""
+
+
 LOGIN_PAGE = """<!doctype html>
 <html lang=\"de\">
 <head>
@@ -1017,6 +1189,7 @@ async function doLogin(event) {
 class Handler(BaseHTTPRequestHandler):
     store: ReviewStore
     auth: PasswordAuth
+    config_path: Path
 
     def log_message(self, fmt: str, *args: object) -> None:
         return
@@ -1092,6 +1265,16 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    def _load_runtime_config(self) -> tuple[dict[str, Any], list[str]]:
+        cfg = load_config(str(self.config_path), self.config_path.parent)
+        if cfg.errors:
+            return {}, cfg.errors
+        return cfg.data if isinstance(cfg.data, dict) else {}, []
+
+    def _write_runtime_config(self, config: dict[str, Any]) -> None:
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        self.config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
 
@@ -1111,10 +1294,37 @@ class Handler(BaseHTTPRequestHandler):
             self._text_response(HTML_PAGE)
             return
 
+        if parsed.path == "/config":
+            if not self._require_auth(is_api=False):
+                return
+            self._text_response(CONFIG_PAGE)
+            return
+
         if parsed.path == "/api/pending":
             if not self._require_auth(is_api=True):
                 return
             self._json_response(self.store.list_entries())
+            return
+
+        if parsed.path == "/api/config":
+            if not self._require_auth(is_api=True):
+                return
+            config, errors = self._load_runtime_config()
+            if errors:
+                self._json_response({"error": "config_load_failed", "errors": errors}, status=500)
+                return
+            service = get_section(config, "service")
+            self._json_response(
+                {
+                    "config_path": str(self.config_path),
+                    "service": {
+                        "input": str(service.get("input", "")).strip(),
+                        "output": str(service.get("output", "")).strip(),
+                        "model": str(service.get("model", "")).strip(),
+                        "interval_seconds": int(service.get("interval_seconds", 300) or 300),
+                    },
+                }
+            )
             return
 
         if parsed.path == "/api/logout":
@@ -1191,6 +1401,58 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/deploy":
             rows = payload.get("rows", []) if isinstance(payload.get("rows"), list) else []
             self._json_response(self.store.deploy(rows))
+            return
+
+        if parsed.path == "/api/config":
+            service_payload = payload.get("service", {}) if isinstance(payload.get("service"), dict) else {}
+            input_path = str(service_payload.get("input", "")).strip()
+            output_path = str(service_payload.get("output", "")).strip()
+            model = str(service_payload.get("model", "")).strip()
+            interval_raw = str(service_payload.get("interval_seconds", "")).strip()
+
+            if not input_path:
+                self._json_response({"error": "service.input is required"}, status=400)
+                return
+
+            try:
+                interval = int(interval_raw)
+            except ValueError:
+                self._json_response({"error": "service.interval_seconds must be an integer"}, status=400)
+                return
+
+            if interval < 30:
+                self._json_response({"error": "service.interval_seconds must be >= 30"}, status=400)
+                return
+
+            config, load_errors = self._load_runtime_config()
+            if load_errors:
+                self._json_response({"error": "config_load_failed", "errors": load_errors}, status=500)
+                return
+
+            if not isinstance(config, dict):
+                config = {}
+            service = config.get("service")
+            if not isinstance(service, dict):
+                service = {}
+
+            service["input"] = input_path
+            service["output"] = output_path
+            service["model"] = model
+            service["interval_seconds"] = interval
+            config["service"] = service
+
+            validation_errors = validate_config(config)
+            if validation_errors:
+                self._json_response({"error": "invalid_config", "errors": validation_errors}, status=400)
+                return
+
+            try:
+                self._write_runtime_config(config)
+            except Exception as exc:
+                self._json_response({"error": f"config_write_failed: {exc}"}, status=500)
+                return
+
+            self._json_response({"ok": True, "config_path": str(self.config_path), "restart_required": True})
             return
 
         self._text_response("Not found", status=404, content_type="text/plain; charset=utf-8")
@@ -1333,6 +1595,7 @@ def main() -> int:
 
     Handler.store = store
     Handler.auth = auth
+    Handler.config_path = cfg.path
     server = ThreadingHTTPServer((host, port), Handler)
     print(f"Review app listening on http://{host}:{port}")
     print(f"Log file: {log_file}")

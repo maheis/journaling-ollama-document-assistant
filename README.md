@@ -76,6 +76,13 @@ Prioritaet:
 
 - CLI-Flag > `assistant_config.json` > Script-Default
 
+Fuer den Dienst `doc_assistant_service.py` sind vor allem diese Werte relevant:
+
+- `service.input`: Inbox-Pfad
+- `service.output`: Basis fuer `_sorted` und `_review`
+- `service.model`: Ollama-Modell
+- `service.interval_seconds`: Scan-Intervall
+
 Validierung:
 
 - `review_web.py` und `doc_assistant_service.py` validieren die Config beim Start
@@ -209,6 +216,12 @@ Der Dienst `doc_assistant_service.py`:
 - startet `organize.py` periodisch im Dry-Run
 - restartet Web-Prozess bei Absturz
 
+Wann der Dienst laeuft:
+
+- nach `install.sh` standardmaessig als user-systemd Unit `ollama-document-assistant.service`
+- beim Login des Users (WantedBy `default.target`)
+- dauerhaft auch ohne Login nur wenn User-Lingering aktiv ist (`loginctl enable-linger <user>`)
+
 Manuell starten:
 
 ```bash
@@ -227,6 +240,21 @@ cp ./systemd/ollama-document-assistant.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now ollama-document-assistant.service
 systemctl --user status ollama-document-assistant.service
+```
+
+Pfade konfigurieren:
+
+1. In `assistant_config.json` unter `service.input` und `service.output`
+2. Optional per CLI beim Start von `doc_assistant_service.py` (`--input`, `--output`)
+3. In der Web-UI ueber `/config` (Button `Konfiguration`)
+
+Hinweis zur Web-Konfigurationsseite:
+
+- speichert in `assistant_config.json` (service.input/output/model/interval_seconds)
+- danach Dienst neu starten, damit die neuen Werte aktiv werden:
+
+```bash
+systemctl --user restart ollama-document-assistant.service
 ```
 
 ## Modell-Standard
