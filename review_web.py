@@ -1201,6 +1201,46 @@ CONFIG_PAGE = """<!doctype html>
             </div>
 
             <div class=\"section\">
+                <h2>Leistung und Ollama</h2>
+                <div class=\"grid\">
+                    <div class=\"field\">
+                        <label for=\"ollama-timeout\">Ollama Timeout Sekunden</label>
+                        <input id=\"ollama-timeout\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"1800\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"ollama-retries\">Ollama Retries</label>
+                        <input id=\"ollama-retries\" type=\"number\" min=\"0\" step=\"1\" placeholder=\"0\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"max-text-chars\">Max. Textzeichen pro Anfrage</label>
+                        <input id=\"max-text-chars\" type=\"number\" min=\"100\" step=\"100\" placeholder=\"6000\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"process-nice\">Process Nice</label>
+                        <input id=\"process-nice\" type=\"number\" min=\"0\" step=\"1\" placeholder=\"5\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"max-cpu-threads\">Max CPU Threads (0 = kein Limit)</label>
+                        <input id=\"max-cpu-threads\" type=\"number\" min=\"0\" step=\"1\" placeholder=\"4\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"ollama-num-thread\">Ollama Num Thread (0 = Default)</label>
+                        <input id=\"ollama-num-thread\" type=\"number\" min=\"0\" step=\"1\" placeholder=\"4\" />
+                    </div>
+
+                    <div class=\"field\">
+                        <label for=\"sleep-between-files\">Pause zwischen Dateien (Sekunden)</label>
+                        <input id=\"sleep-between-files\" type=\"number\" min=\"0\" step=\"0.1\" placeholder=\"0.4\" />
+                    </div>
+                </div>
+            </div>
+
+            <div class=\"section\">
                 <h2>Sicherheit</h2>
                 <div class=\"grid\">
                     <div class=\"field\">
@@ -1324,6 +1364,7 @@ async function loadConfig() {
     }
 
     const service = payload.service || {};
+    const organize = service.organize_options || {};
     byId('input').value = service.input || '';
     byId('output').value = service.output || '';
     byId('model').value = service.model || '';
@@ -1331,6 +1372,13 @@ async function loadConfig() {
     byId('interval').value = service.interval_seconds || 300;
     byId('daily-time').value = service.daily_time || '02:00';
     byId('inbox-poll').value = service.inbox_poll_seconds || 2;
+    byId('ollama-timeout').value = organize.ollama_timeout ?? 1800;
+    byId('ollama-retries').value = organize.ollama_retries ?? 0;
+    byId('max-text-chars').value = organize.max_text_chars ?? 6000;
+    byId('process-nice').value = organize.process_nice ?? 5;
+    byId('max-cpu-threads').value = organize.max_cpu_threads ?? 4;
+    byId('ollama-num-thread').value = organize.ollama_num_thread ?? 4;
+    byId('sleep-between-files').value = organize.sleep_between_files ?? 0.4;
     byId('new-password').value = '';
     byId('new-password-confirm').value = '';
     byId('meta').textContent = `Config-Datei: ${payload.config_path} | Passwortdatei: ${payload.auth_password_file || '-'}`;
@@ -1351,6 +1399,15 @@ async function saveConfig() {
             interval_seconds: byId('interval').value,
             daily_time: byId('daily-time').value,
             inbox_poll_seconds: byId('inbox-poll').value
+        },
+        organize_options: {
+            ollama_timeout: byId('ollama-timeout').value,
+            ollama_retries: byId('ollama-retries').value,
+            max_text_chars: byId('max-text-chars').value,
+            process_nice: byId('process-nice').value,
+            max_cpu_threads: byId('max-cpu-threads').value,
+            ollama_num_thread: byId('ollama-num-thread').value,
+            sleep_between_files: byId('sleep-between-files').value
         },
         auth: {
             new_password: newPassword,
@@ -1700,6 +1757,63 @@ class Handler(BaseHTTPRequestHandler):
         cmd.extend(extra_args)
         return cmd, project_dir
 
+    def _organize_options_from_args(self, extra_args: list[str]) -> dict[str, Any]:
+        values: dict[str, Any] = {
+            "ollama_timeout": 1800,
+            "ollama_retries": 0,
+            "max_text_chars": 6000,
+            "process_nice": 5,
+            "max_cpu_threads": 4,
+            "ollama_num_thread": 4,
+            "sleep_between_files": 0.4,
+        }
+
+        mapping = {
+            "--ollama-timeout": ("ollama_timeout", int),
+            "--ollama-retries": ("ollama_retries", int),
+            "--max-text-chars": ("max_text_chars", int),
+            "--process-nice": ("process_nice", int),
+            "--max-cpu-threads": ("max_cpu_threads", int),
+            "--ollama-num-thread": ("ollama_num_thread", int),
+            "--sleep-between-files": ("sleep_between_files", float),
+        }
+
+        args = [str(v) for v in extra_args]
+        i = 0
+        while i < len(args):
+            flag = args[i]
+            spec = mapping.get(flag)
+            if spec and i + 1 < len(args):
+                key, caster = spec
+                raw = args[i + 1]
+                try:
+                    values[key] = caster(raw)
+                except Exception:
+                    pass
+                i += 2
+                continue
+            i += 1
+
+        return values
+
+    def _organize_args_from_options(self, options: dict[str, Any]) -> list[str]:
+        return [
+            "--ollama-timeout",
+            str(int(options.get("ollama_timeout", 1800))),
+            "--ollama-retries",
+            str(int(options.get("ollama_retries", 0))),
+            "--max-text-chars",
+            str(int(options.get("max_text_chars", 6000))),
+            "--process-nice",
+            str(int(options.get("process_nice", 5))),
+            "--max-cpu-threads",
+            str(int(options.get("max_cpu_threads", 4))),
+            "--ollama-num-thread",
+            str(int(options.get("ollama_num_thread", 4))),
+            "--sleep-between-files",
+            str(float(options.get("sleep_between_files", 0.4))),
+        ]
+
     def _detect_organize_activity(self) -> bool:
         config, load_errors = self._load_runtime_config()
         if load_errors:
@@ -1811,6 +1925,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"error": "config_load_failed", "errors": errors}, status=500)
                 return
             service = get_section(config, "service")
+            organize_extra_args = [str(v) for v in service.get("organize_extra_args", [])] if isinstance(service.get("organize_extra_args", []), list) else []
+            organize_options = self._organize_options_from_args(organize_extra_args)
             self._json_response(
                 {
                     "config_path": str(self.config_path),
@@ -1823,6 +1939,7 @@ class Handler(BaseHTTPRequestHandler):
                         "interval_seconds": int(service.get("interval_seconds", 300) or 300),
                         "daily_time": str(service.get("daily_time", "02:00")).strip() or "02:00",
                         "inbox_poll_seconds": int(service.get("inbox_poll_seconds", 2) or 2),
+                        "organize_options": organize_options,
                     },
                 }
             )
@@ -1972,6 +2089,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/config":
             service_payload = payload.get("service", {}) if isinstance(payload.get("service"), dict) else {}
             auth_payload = payload.get("auth", {}) if isinstance(payload.get("auth"), dict) else {}
+            organize_payload = payload.get("organize_options", {}) if isinstance(payload.get("organize_options"), dict) else {}
             input_path = str(service_payload.get("input", "")).strip()
             output_path = str(service_payload.get("output", "")).strip()
             model = str(service_payload.get("model", "")).strip()
@@ -2010,6 +2128,39 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"error": "service.schedule_mode must be one of: interval, inbox-trigger, daily"}, status=400)
                 return
 
+            try:
+                organize_options = {
+                    "ollama_timeout": int(organize_payload.get("ollama_timeout", 1800)),
+                    "ollama_retries": int(organize_payload.get("ollama_retries", 0)),
+                    "max_text_chars": int(organize_payload.get("max_text_chars", 6000)),
+                    "process_nice": int(organize_payload.get("process_nice", 5)),
+                    "max_cpu_threads": int(organize_payload.get("max_cpu_threads", 4)),
+                    "ollama_num_thread": int(organize_payload.get("ollama_num_thread", 4)),
+                    "sleep_between_files": float(organize_payload.get("sleep_between_files", 0.4)),
+                }
+            except Exception:
+                self._json_response({"error": "organize options have invalid numeric values"}, status=400)
+                return
+
+            if organize_options["ollama_timeout"] < 1:
+                self._json_response({"error": "ollama_timeout must be >= 1"}, status=400)
+                return
+            if organize_options["ollama_retries"] < 0:
+                self._json_response({"error": "ollama_retries must be >= 0"}, status=400)
+                return
+            if organize_options["max_text_chars"] < 100:
+                self._json_response({"error": "max_text_chars must be >= 100"}, status=400)
+                return
+            if organize_options["max_cpu_threads"] < 0:
+                self._json_response({"error": "max_cpu_threads must be >= 0"}, status=400)
+                return
+            if organize_options["ollama_num_thread"] < 0:
+                self._json_response({"error": "ollama_num_thread must be >= 0"}, status=400)
+                return
+            if organize_options["sleep_between_files"] < 0:
+                self._json_response({"error": "sleep_between_files must be >= 0"}, status=400)
+                return
+
             if new_password or new_password_confirm:
                 if new_password != new_password_confirm:
                     self._json_response({"error": "password confirmation does not match"}, status=400)
@@ -2036,6 +2187,7 @@ class Handler(BaseHTTPRequestHandler):
             service["interval_seconds"] = interval
             service["daily_time"] = daily_time
             service["inbox_poll_seconds"] = inbox_poll_seconds
+            service["organize_extra_args"] = self._organize_args_from_options(organize_options)
 
             review = config.get("review_web")
             if not isinstance(review, dict):
