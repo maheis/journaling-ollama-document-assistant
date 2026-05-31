@@ -218,6 +218,7 @@ class ReviewStore:
         oda_debug(f"{prefix}STATE: entries={list(self.state['entries'].keys())}")
 
     def delete_entry_everywhere(self, entry_id: str) -> bool:
+        oda_debug("delete_entry_everywhere: TEST reached")
         oda_debug(f"delete_entry_everywhere: id={entry_id}")
         with self.lock:
             entry = self.state["entries"].get(entry_id)
