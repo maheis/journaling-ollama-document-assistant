@@ -547,8 +547,6 @@ class ReviewStore:
                     continue
 
                 incoming = row.get("edited", {}) if isinstance(row.get("edited", {}), dict) else {}
-                learn_fields = row.get("learn", {}) if isinstance(row.get("learn", {}), dict) else {}
-
                 for field in ("sender", "category", "customer_number", "title", "date"):
                     value = str(incoming.get(field, "")).strip()
                     if field == "category":
@@ -558,7 +556,6 @@ class ReviewStore:
                     entry["edited"][field] = value
 
                 self._remember_values(entry["edited"])
-                learned += self._learn_aliases(entry, learn_fields)
 
                 src = Path(entry["source"])
                 if not src.exists():
@@ -583,7 +580,6 @@ class ReviewStore:
             return {
                 "applied": applied,
                 "missing": missing,
-                "learned_aliases": learned,
                 "errors": errors,
             }
 
@@ -733,8 +729,7 @@ HTML_PAGE = """<!doctype html>
         .status-missing { color: #ff9b9b; border-color: #7a2a2a; background: #2a1717; }
         a.filelink { color: #67c7ff; text-decoration: none; }
         a.filelink:hover { text-decoration: underline; }
-        .learn { display: flex; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-        .learn label { display: inline-flex; align-items: center; gap: 4px; }
+        /* .learn styles removed */
         .row-actions { display: flex; gap: 8px; margin-top: 8px; }
         .row-actions button { padding: 6px 8px; font-size: 12px; border-radius: 8px; }
     </style>
@@ -877,14 +872,6 @@ function rowMarkup(row) {
         </td>
         <td class=\"mini\">${esc(row.target_preview || '')}</td>
         <td>
-            <div class=\"learn\">
-                <label><input type=\"checkbox\" name=\"learn_sender\" /> Sender</label>
-                <label><input type=\"checkbox\" name=\"learn_category\" /> Kategorie</label>
-                <label><input type=\"checkbox\" name=\"learn_customer_number\" /> Kunden-Nr</label>
-                <label><input type=\"checkbox\" name=\"learn_title\" /> Titel</label>
-            </div>
-        </td>
-        <td>
             <div class=\"row-actions\">
                 <button onclick=\"saveRow('${esc(row.id)}')\" ${deployDisabled}>Speichern</button>
                 <button class=\"primary\" onclick=\"deployRow('${esc(row.id)}')\" ${deployDisabled}>Ausführen</button>
@@ -921,12 +908,6 @@ function rowPayload(tr) {
             title: tr.querySelector('[name="title"]').value,
             date: tr.querySelector('[name="date"]').value,
         },
-        learn: {
-            sender: tr.querySelector('[name="learn_sender"]').checked,
-            category: tr.querySelector('[name="learn_category"]').checked,
-            customer_number: tr.querySelector('[name="learn_customer_number"]').checked,
-            title: tr.querySelector('[name="learn_title"]').checked,
-        }
     };
 }
 
@@ -1092,7 +1073,7 @@ async function deployAll() {
         body: JSON.stringify({ rows })
     });
     const payload = await res.json();
-    const msg = `Ausführung fertig: verschoben=${payload.applied}, fehlend=${payload.missing}, gelernt=${payload.learned_aliases}, fehler=${(payload.errors || []).length}`;
+    const msg = `Ausführung fertig: verschoben=${payload.applied}, fehlend=${payload.missing}, fehler=${(payload.errors || []).length}`;
     status(msg);
     await reloadData();
 }
@@ -1110,7 +1091,7 @@ async function deployRow(id) {
         body: JSON.stringify({ rows: [rowPayload(tr)] })
     });
     const payload = await res.json();
-    const msg = `Zeile ausgeführt: verschoben=${payload.applied}, fehlend=${payload.missing}, gelernt=${payload.learned_aliases}, fehler=${(payload.errors || []).length}`;
+    const msg = `Zeile ausgeführt: verschoben=${payload.applied}, fehlend=${payload.missing}, fehler=${(payload.errors || []).length}`;
     status(msg);
     await reloadData();
 }
