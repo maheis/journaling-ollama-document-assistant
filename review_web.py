@@ -33,6 +33,15 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+DEBUG_LOG = Path("oda_debug.log")
+def oda_debug(msg: str):
+    try:
+        with DEBUG_LOG.open("a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().isoformat()}] {msg}\n")
+    except Exception:
+        pass
+
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
@@ -201,22 +210,29 @@ class PasswordAuth:
 
 
 class ReviewStore:
+    def debug_state(self, prefix: str = ""):  # optional: dump state
+        oda_debug(f"{prefix}STATE: entries={list(self.state['entries'].keys())}")
+
     def delete_entry_everywhere(self, entry_id: str) -> bool:
-        """Entfernt den Eintrag aus state und allen Logdateien."""
+        oda_debug(f"delete_entry_everywhere: id={entry_id}")
         with self.lock:
             entry = self.state["entries"].get(entry_id)
             if not entry:
+                oda_debug(f"delete_entry_everywhere: id={entry_id} NICHT gefunden!")
+                self.debug_state("nach delete_entry NICHT gefunden: ")
                 return False
-            # 1. Aus state entfernen
             del self.state["entries"][entry_id]
             self._save_state()
-            # 2. Aus allen Logdateien entfernen
+            oda_debug(f"delete_entry_everywhere: id={entry_id} aus state entfernt")
+            self.debug_state("nach state-delete: ")
             log_files = self._log_files_for_sync()
+            oda_debug(f"delete_entry_everywhere: log_files={[str(l) for l in log_files]}")
             changed = False
             for log_file in log_files:
                 try:
                     lines = log_file.read_text(encoding="utf-8").splitlines()
-                except Exception:
+                except Exception as e:
+                    oda_debug(f"delete_entry_everywhere: Fehler beim Lesen {log_file}: {e}")
                     continue
                 new_lines = []
                 for line in lines:
@@ -226,14 +242,16 @@ class ReviewStore:
                         new_lines.append(line)
                         continue
                     if entry_id_for_event(event) == entry_id:
+                        oda_debug(f"delete_entry_everywhere: Zeile in {log_file} entfernt")
                         changed = True
-                        continue  # Zeile entfernen
+                        continue
                     new_lines.append(line)
                 if changed:
                     try:
                         log_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-                    except Exception:
-                        pass
+                        oda_debug(f"delete_entry_everywhere: {log_file} geschrieben")
+                    except Exception as e:
+                        oda_debug(f"delete_entry_everywhere: Fehler beim Schreiben {log_file}: {e}")
             return True
 
     def __init__(self, paths: Paths, categories: list[str]) -> None:
@@ -644,6 +662,7 @@ HTML_PAGE = """<!doctype html>
             --bg: #0f1117;
             --bg2: #151926;
             --card: #1c2233;
+            --card2: #1a2030;
             --ink: #e8edf7;
             --muted: #9aa6bd;
             --accent: #23c4a8;
@@ -1678,7 +1697,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/reset-review-state":
-            # Reset: review_state.json leeren und alle relevanten Logfiles löschen (wie install.sh)
+            oda_debug("API: /api/reset-review-state RESET aufgerufen")
             try:
                 import os
                 # Dynamische Pfade aus Konfiguration
@@ -1700,6 +1719,7 @@ class Handler(BaseHTTPRequestHandler):
                     json.dump(empty, f, ensure_ascii=False, indent=2)
                 self.store.state = empty
                 self.store.aliases = {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
+                oda_debug("RESET: state und aliases geleert")
                 # Logfiles in allen relevanten logs/-Verzeichnissen löschen
                 deleted_logs = []
                 for logs_dir in logs_dirs:
@@ -1708,10 +1728,12 @@ class Handler(BaseHTTPRequestHandler):
                             try:
                                 log.unlink()
                                 deleted_logs.append(str(log))
-                            except Exception:
-                                pass
+                                oda_debug(f"RESET: Logfile gelöscht: {log}")
+                            except Exception as e:
+                                oda_debug(f"RESET: Fehler beim Löschen {log}: {e}")
                 self._json_response({"ok": True, "deleted_logs": deleted_logs})
             except Exception as exc:
+                oda_debug(f"RESET: Fehler: {exc}")
                 self._json_response({"ok": False, "error": str(exc)}, status=500)
             return
         # ...existing code for other POST endpoints...
@@ -2336,10 +2358,13 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/delete-entry":
             entry_id = str(payload.get("id", "")).strip()
+            oda_debug(f"API: /api/delete-entry id={entry_id}")
             if not entry_id:
+                oda_debug("API: /api/delete-entry ohne id!")
                 self._json_response({"ok": False, "error": "Kein Eintrag angegeben"}, status=400)
                 return
             ok = self.store.delete_entry_everywhere(entry_id)
+            oda_debug(f"API: /api/delete-entry Ergebnis: {ok}")
             if ok:
                 self._json_response({"ok": True})
             else:
