@@ -202,6 +202,7 @@ set_or_generate_web_password() {
   local password_file="$1"
   local entered=""
   local confirm=""
+  local password_plain=""
 
   # Never rotate password on reinstall unless user removes the file explicitly.
   if [[ -f "$password_file" ]]; then
@@ -212,11 +213,24 @@ set_or_generate_web_password() {
 
   # In non-interactive mode, keep existing password or generate a new one.
   if [[ ! -t 0 ]]; then
-    "$VENV_DIR/bin/python" - <<'PY' > "$password_file"
+  password_plain="$("$VENV_DIR/bin/python" - <<'PY'
 import secrets
 print(secrets.token_urlsafe(24))
 PY
+)"
+  ODA_WEB_PASSWORD="$password_plain" "$VENV_DIR/bin/python" - <<'PY' > "$password_file"
+import hashlib
+import os
+import secrets
+
+password = os.environ["ODA_WEB_PASSWORD"]
+salt = secrets.token_bytes(16)
+iterations = 260000
+digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+print(f"pbkdf2_sha256${iterations}${salt.hex()}${digest.hex()}")
+PY
     chmod 600 "$password_file"
+  WEB_PASSWORD_PLAIN="$password_plain"
     echo "Generated password file (non-interactive mode): $password_file"
     return
   fi
@@ -226,11 +240,24 @@ PY
     echo
 
     if [[ -z "$entered" ]]; then
-      "$VENV_DIR/bin/python" - <<'PY' > "$password_file"
+  password_plain="$("$VENV_DIR/bin/python" - <<'PY'
 import secrets
 print(secrets.token_urlsafe(24))
 PY
+)"
+  ODA_WEB_PASSWORD="$password_plain" "$VENV_DIR/bin/python" - <<'PY' > "$password_file"
+import hashlib
+import os
+import secrets
+
+password = os.environ["ODA_WEB_PASSWORD"]
+salt = secrets.token_bytes(16)
+iterations = 260000
+digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+print(f"pbkdf2_sha256${iterations}${salt.hex()}${digest.hex()}")
+PY
       chmod 600 "$password_file"
+  WEB_PASSWORD_PLAIN="$password_plain"
       echo "Generated password file: $password_file"
       return
     fi
@@ -243,8 +270,19 @@ PY
       continue
     fi
 
-    printf '%s\n' "$entered" > "$password_file"
+    ODA_WEB_PASSWORD="$entered" "$VENV_DIR/bin/python" - <<'PY' > "$password_file"
+import hashlib
+import os
+import secrets
+
+password = os.environ["ODA_WEB_PASSWORD"]
+salt = secrets.token_bytes(16)
+iterations = 260000
+digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+print(f"pbkdf2_sha256${iterations}${salt.hex()}${digest.hex()}")
+PY
     chmod 600 "$password_file"
+    WEB_PASSWORD_PLAIN="$entered"
     echo "Saved password file: $password_file"
     return
   done
@@ -506,7 +544,11 @@ echo "Config file: $PROJECT_DIR/assistant_config.json"
 echo "Password file: $PROJECT_DIR/.review_web_password"
 echo "Review URL: http://127.0.0.1:8449"
 
-echo "Current web password:"
-head -n 1 "$PROJECT_DIR/.review_web_password"
+if [[ -n "${WEB_PASSWORD_PLAIN:-}" ]]; then
+  echo "Current web password:"
+  printf '%s\n' "$WEB_PASSWORD_PLAIN"
+else
+  echo "Current web password unchanged."
+fi
 
 maybe_delete_bootstrap_installer

@@ -60,6 +60,73 @@ DEFAULT_CATEGORIES = [
     "SONSTIGES",
 ]
 
+PASSWORD_HASH_PREFIX = "pbkdf2_sha256"
+PASSWORD_HASH_ITERATIONS = 260000
+FILE_STREAM_CHUNK_SIZE = 64 * 1024
+
+
+def hash_password(password: str, *, salt: Optional[bytes] = None, iterations: int = PASSWORD_HASH_ITERATIONS) -> str:
+    salt = salt or secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return f"{PASSWORD_HASH_PREFIX}${iterations}${salt.hex()}${digest.hex()}"
+
+
+def is_password_hash(value: str) -> bool:
+    return str(value or "").startswith(PASSWORD_HASH_PREFIX + "$")
+
+
+def verify_password(password_attempt: str, password_record: str) -> bool:
+    record = str(password_record or "").strip()
+    if not record:
+        return False
+    if not is_password_hash(record):
+        return hmac.compare_digest(password_attempt, record)
+
+    try:
+        prefix, iterations_raw, salt_hex, digest_hex = record.split("$", 3)
+        if prefix != PASSWORD_HASH_PREFIX:
+            return False
+        iterations = int(iterations_raw)
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(digest_hex)
+    except (ValueError, TypeError):
+        return False
+
+    actual = hashlib.pbkdf2_hmac("sha256", password_attempt.encode("utf-8"), salt, iterations)
+    return hmac.compare_digest(actual, expected)
+
+
+def normalize_password_record(secret: str) -> str:
+    value = str(secret or "").strip()
+    if not value:
+        return ""
+    if is_password_hash(value):
+        return value
+    return hash_password(value)
+
+
+def load_password_record(path: Path) -> str:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return ""
+    if not lines:
+        return ""
+
+    raw = lines[0].strip()
+    if not raw:
+        return ""
+    if is_password_hash(raw):
+        return raw
+
+    hashed = hash_password(raw)
+    try:
+        path.write_text(hashed + "\n", encoding="utf-8")
+        os.chmod(path, 0o600)
+    except Exception:
+        return raw
+    return hashed
+
 
 def strip_to_ascii(text: str) -> str:
     text = text.replace("\u00e4", "ae").replace("\u00f6", "oe").replace("\u00fc", "ue")
@@ -162,19 +229,19 @@ class Paths:
 
 class PasswordAuth:
     def __init__(self, password: str, session_ttl_seconds: int) -> None:
-        self.password = password
+        self.password_record = normalize_password_record(password)
         self.session_ttl_seconds = max(300, session_ttl_seconds)
         self.sessions: dict[str, float] = {}
         self.lock = threading.Lock()
 
     @property
     def enabled(self) -> bool:
-        return bool(self.password)
+        return bool(self.password_record)
 
     def create_session(self, password_attempt: str) -> Optional[str]:
         if not self.enabled:
             return ""
-        if not hmac.compare_digest(password_attempt, self.password):
+        if not verify_password(password_attempt, self.password_record):
             return None
         token = secrets.token_urlsafe(32)
         with self.lock:
@@ -204,6 +271,11 @@ class PasswordAuth:
             return
         with self.lock:
             self.sessions.pop(token, None)
+
+    def replace_password(self, password: str) -> None:
+        self.password_record = normalize_password_record(password)
+        with self.lock:
+            self.sessions.clear()
 
 
 
@@ -2306,7 +2378,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             try:
-                data = path.read_bytes()
+                file_size = path.stat().st_size
+                file_handle = path.open("rb")
             except Exception:
                 self._text_response("Read error", status=500, content_type="text/plain; charset=utf-8")
                 return
@@ -2315,10 +2388,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(HTTPStatus.OK)
             self._send_security_headers()
             self.send_header("Content-Type", content_type or "application/octet-stream")
-            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Content-Length", str(file_size))
             self.send_header("Content-Disposition", f"inline; filename={path.name}")
             self.end_headers()
-            self.wfile.write(data)
+            try:
+                with file_handle:
+                    while True:
+                        chunk = file_handle.read(FILE_STREAM_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                return
             return
 
         self._text_response("Not found", status=404, content_type="text/plain; charset=utf-8")
@@ -2613,8 +2694,9 @@ class Handler(BaseHTTPRequestHandler):
             if new_password:
                 try:
                     auth_password_file.parent.mkdir(parents=True, exist_ok=True)
-                    auth_password_file.write_text(new_password.strip() + "\n", encoding="utf-8")
+                    auth_password_file.write_text(hash_password(new_password.strip()) + "\n", encoding="utf-8")
                     os.chmod(auth_password_file, 0o600)
+                    self.auth.replace_password(new_password.strip())
                 except Exception as exc:
                     self._json_response({"error": f"password_write_failed: {exc}"}, status=500)
                     return
@@ -2690,10 +2772,7 @@ def resolve_auth_password(args: argparse.Namespace, base_dir: Path) -> str:
         if not p.is_absolute():
             p = base_dir / p
         if p.exists():
-            try:
-                return p.read_text(encoding="utf-8").splitlines()[0].strip()
-            except Exception:
-                return ""
+            return load_password_record(p)
     auth_password = (args.auth_password or "").strip()
     if auth_password:
         return auth_password
@@ -2754,10 +2833,7 @@ def main() -> int:
         if not p.is_absolute():
             p = base_dir / p
         if p.exists():
-            try:
-                auth_password = p.read_text(encoding="utf-8").splitlines()[0].strip()
-            except Exception:
-                auth_password = ""
+            auth_password = load_password_record(p)
 
     auth = PasswordAuth(auth_password, session_ttl_seconds)
 

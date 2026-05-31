@@ -14,11 +14,17 @@ Wichtiges Prinzip:
 curl -fsSL https://raw.githubusercontent.com/maheis/ollama-document-assistant/main/install.sh | bash -s -- --full-setup
 ```
 
-## Passwort auslesen
+## Passwort-Datei
 
 ```bash
 head -n 1 ~/.local/share/ollama-document-assistant/.review_web_password
 ```
+
+Hinweis:
+
+- die Datei enthaelt jetzt einen Passwort-Hash, nicht das Klartext-Passwort
+- bei einer Neuinstallation zeigt `install.sh` das erzeugte Passwort einmalig am Ende an
+- ein neues Passwort kann spaeter in der Web-UI gesetzt werden
 
 ## Was das Projekt macht
 
@@ -177,7 +183,7 @@ bash ./uninstall.sh
 Optional (zusaetzlich Modell und Ollama entfernen):
 
 ```bash
-bash ~/.local/share/ollama-document-assistant/uninstall.sh --remove-models --remove-ollama
+bash ~/.local/share/ollama-document-assistant/uninstall.sh --remove-ollama --remove-models
 ```
 
 Wenn bei der Installation ein eigener `--install-dir` verwendet wurde, rufe das Skript aus genau diesem Verzeichnis auf.
