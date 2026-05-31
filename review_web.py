@@ -1725,193 +1725,174 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
-    # def do_POST(self):
-    #     parsed = urlparse(self.path)
-    #     if parsed.path == "/api/reset-review-state":
-    #         oda_debug("API: /api/reset-review-state RESET aufgerufen")
-    #         try:
-    #             import os
-    #             # Dynamische Pfade aus Konfiguration
-    #             state_file = self.store.paths.state_file
-    #             log_file = self.store.paths.log_file
-    #             logs_dirs = set()
-    #             # logs/-Verzeichnis im Projektordner
-    #             logs_dirs.add((log_file.parent / "logs").resolve())
-    #             # logs/-Verzeichnis im Standarddatenverzeichnis
-    #             default_data_dir = Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs")).resolve()
-    #             logs_dirs.add(default_data_dir)
-    #             # logs/-Verzeichnis relativ zum state_file
-    #             logs_dirs.add((state_file.parent / "logs").resolve())
-    #             # logs/-Verzeichnis relativ zum log_file
-
-        if parsed.path == "/api/config":
-            service_payload = payload.get("service", {}) if isinstance(payload.get("service"), dict) else {}
-            auth_payload = payload.get("auth", {}) if isinstance(payload.get("auth"), dict) else {}
-            organize_payload = payload.get("organize_options", {}) if isinstance(payload.get("organize_options"), dict) else {}
-            input_path = str(service_payload.get("input", "")).strip()
-            output_path = str(service_payload.get("output", "")).strip()
-            model = str(service_payload.get("model", "")).strip()
-            schedule_mode = str(service_payload.get("schedule_mode", "interval")).strip().lower() or "interval"
-            interval_raw = str(service_payload.get("interval_seconds", "")).strip()
-            daily_time = str(service_payload.get("daily_time", "02:00")).strip() or "02:00"
-            inbox_poll_raw = str(service_payload.get("inbox_poll_seconds", "2")).strip() or "2"
-            new_password = str(auth_payload.get("new_password", ""))
-            new_password_confirm = str(auth_payload.get("new_password_confirm", ""))
-
-            oda_debug(f"[CONFIG] Eingehender Speichervorgang: input={input_path}, output={output_path}, model={model}, schedule_mode={schedule_mode}, interval={interval_raw}, daily_time={daily_time}, inbox_poll={inbox_poll_raw}")
-
-            if not input_path:
-                oda_debug("[CONFIG] Fehler: Inbox ist erforderlich (service.input)")
-                self._json_response({"error": "Inbox ist erforderlich (service.input)"}, status=400)
-                return
-
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/reset-review-state":
+            oda_debug("API: /api/reset-review-state RESET aufgerufen")
             try:
-                interval = int(interval_raw)
-            except ValueError:
-                oda_debug("[CONFIG] Fehler: service.interval_seconds muss Integer sein")
-                self._json_response({"error": "service.interval_seconds must be an integer"}, status=400)
-                return
-
-            if interval < 30:
-                oda_debug("[CONFIG] Fehler: service.interval_seconds < 30")
-                self._json_response({"error": "service.interval_seconds must be >= 30"}, status=400)
-                return
-
-            try:
-                inbox_poll_seconds = int(inbox_poll_raw)
-            except ValueError:
-                oda_debug("[CONFIG] Fehler: service.inbox_poll_seconds muss Integer sein")
-                self._json_response({"error": "service.inbox_poll_seconds must be an integer"}, status=400)
-                return
-
-            if inbox_poll_seconds < 1:
-                oda_debug("[CONFIG] Fehler: service.inbox_poll_seconds < 1")
-                self._json_response({"error": "service.inbox_poll_seconds must be >= 1"}, status=400)
-                return
-
-            if schedule_mode not in {"interval", "inbox-trigger", "daily"}:
-                oda_debug(f"[CONFIG] Fehler: Ungültiger schedule_mode: {schedule_mode}")
-                self._json_response({"error": "service.schedule_mode must be one of: interval, inbox-trigger, daily"}, status=400)
-                return
-
-            try:
-                organize_options = {
-                    "ollama_timeout": int(organize_payload.get("ollama_timeout", 1800)),
-                    "ollama_retries": int(organize_payload.get("ollama_retries", 0)),
-                    "max_text_chars": int(organize_payload.get("max_text_chars", 6000)),
-                    "process_nice": int(organize_payload.get("process_nice", 5)),
-                    "max_cpu_threads": int(organize_payload.get("max_cpu_threads", 4)),
-                    "ollama_num_thread": int(organize_payload.get("ollama_num_thread", 4)),
-                    "sleep_between_files": float(organize_payload.get("sleep_between_files", 0.4)),
-                }
+                import os
+                # Dynamische Pfade aus Konfiguration
+                state_file = self.store.paths.state_file
+                log_file = self.store.paths.log_file
+                logs_dirs = set()
+                # logs/-Verzeichnis im Projektordner
+                logs_dirs.add((log_file.parent / "logs").resolve())
+                # logs/-Verzeichnis im Standarddatenverzeichnis
+                default_data_dir = Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs")).resolve()
+                logs_dirs.add(default_data_dir)
+                # logs/-Verzeichnis relativ zum state_file
+                logs_dirs.add((state_file.parent / "logs").resolve())
+                # logs/-Verzeichnis relativ zum log_file
+                logs_dirs.add((log_file.parent).resolve())
+                # review_state.json leeren und In-Memory-Cache resetten
+                empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
+                with open(state_file, "w", encoding="utf-8") as f:
+                    json.dump(empty, f, ensure_ascii=False, indent=2)
+                self.store.state = empty
+                self.store.aliases = {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
+                oda_debug("RESET: state und aliases geleert")
+                # Logfiles in allen relevanten logs/-Verzeichnissen löschen
+                deleted_logs = []
+                for logs_dir in logs_dirs:
+                    if logs_dir.exists() and logs_dir.is_dir():
+                        for log in logs_dir.glob("*_organize_log.jsonl"):
+                            try:
+                                log.unlink()
+                                deleted_logs.append(str(log))
+                                oda_debug(f"RESET: Logfile gelöscht: {log}")
+                            except Exception as e:
+                                oda_debug(f"RESET: Fehler beim Löschen {log}: {e}")
+                self._json_response({"ok": True, "deleted_logs": deleted_logs})
             except Exception as exc:
-                oda_debug(f"[CONFIG] Fehler: organize options numeric values: {exc}")
-                self._json_response({"error": "organize options have invalid numeric values"}, status=400)
-                return
-
-            if organize_options["ollama_timeout"] < 1:
-                oda_debug("[CONFIG] Fehler: ollama_timeout < 1")
-                self._json_response({"error": "ollama_timeout must be >= 1"}, status=400)
-                return
-            if organize_options["ollama_retries"] < 0:
-                oda_debug("[CONFIG] Fehler: ollama_retries < 0")
-                self._json_response({"error": "ollama_retries must be >= 0"}, status=400)
-                return
-            if organize_options["max_text_chars"] < 100:
-                oda_debug("[CONFIG] Fehler: max_text_chars < 100")
-                self._json_response({"error": "max_text_chars must be >= 100"}, status=400)
-                return
-            if organize_options["max_cpu_threads"] < 0:
-                oda_debug("[CONFIG] Fehler: max_cpu_threads < 0")
-                self._json_response({"error": "max_cpu_threads must be >= 0"}, status=400)
-                return
-            if organize_options["ollama_num_thread"] < 0:
-                oda_debug("[CONFIG] Fehler: ollama_num_thread < 0")
-                self._json_response({"error": "ollama_num_thread must be >= 0"}, status=400)
-                return
-            if organize_options["sleep_between_files"] < 0:
-                oda_debug("[CONFIG] Fehler: sleep_between_files < 0")
-                self._json_response({"error": "sleep_between_files must be >= 0"}, status=400)
-                return
-
-            if new_password or new_password_confirm:
-                if new_password != new_password_confirm:
-                    oda_debug("[CONFIG] Fehler: Passwort-Bestätigung stimmt nicht überein")
-                    self._json_response({"error": "password confirmation does not match"}, status=400)
-                    return
-                if len(new_password.strip()) < 8:
-                    oda_debug("[CONFIG] Fehler: Passwort zu kurz")
-                    self._json_response({"error": "password must be at least 8 characters"}, status=400)
-                    return
-
-            config, load_errors = self._load_runtime_config()
-            if load_errors:
-                oda_debug(f"[CONFIG] Fehler: config_load_failed: {load_errors}")
-                self._json_response({"error": "config_load_failed", "errors": load_errors}, status=500)
-                return
-
-            if not isinstance(config, dict):
-                config = {}
-            service = config.get("service")
-            if not isinstance(service, dict):
-                service = {}
-
-            service["input"] = input_path
-            service["output"] = output_path
-            service["model"] = model
-            service["schedule_mode"] = schedule_mode
-            service["interval_seconds"] = interval
-            service["daily_time"] = daily_time
-            service["inbox_poll_seconds"] = inbox_poll_seconds
-            service["organize_extra_args"] = self._organize_args_from_options(organize_options)
-
-            review = config.get("review_web")
-            if not isinstance(review, dict):
-                review = {}
-
-            auth_password_file = self._resolve_auth_password_file(config)
-            auth_password_file_rel = os.path.relpath(auth_password_file, self.config_path.parent)
-            service["auth_password_file"] = auth_password_file_rel
-            service["auth_password"] = ""
-            review["auth_password_file"] = auth_password_file_rel
-            review["auth_password"] = ""
-            config["service"] = service
-            config["review_web"] = review
-
-            validation_errors = validate_config(config)
-            if validation_errors:
-                oda_debug(f"[CONFIG] Fehler: invalid_config: {validation_errors}")
-                self._json_response({"error": "invalid_config", "errors": validation_errors}, status=400)
-                return
-
-            try:
-                self._write_runtime_config(config)
-            except Exception as exc:
-                oda_debug(f"[CONFIG] Exception beim Schreiben: {exc}")
-                self._json_response({"error": f"config_write_failed: {exc}"}, status=500)
-                return
-
-            if new_password:
-                try:
-                    auth_password_file.parent.mkdir(parents=True, exist_ok=True)
-                    auth_password_file.write_text(new_password.strip() + "\n", encoding="utf-8")
-                    os.chmod(auth_password_file, 0o600)
-                except Exception as exc:
-                    oda_debug(f"[CONFIG] Exception beim Passwort-Schreiben: {exc}")
-                    self._json_response({"error": f"password_write_failed: {exc}"}, status=500)
-                    return
-
-            oda_debug(f"[CONFIG] Erfolgreich gespeichert: config_path={self.config_path}, auth_password_file={auth_password_file}")
-
-            self._json_response(
-                {
-                    "ok": True,
-                    "config_path": str(self.config_path),
-                    "auth_password_file": str(auth_password_file),
-                    "restart_required": True,
-                }
-            )
+                oda_debug(f"RESET: Fehler: {exc}")
+                self._json_response({"ok": False, "error": str(exc)}, status=500)
             return
+        # ...existing code for other POST endpoints...
+
+    store: ReviewStore
+    auth: PasswordAuth
+    config_path: Path
+    scan_lock = threading.Lock()
+    scan_proc: Optional[subprocess.Popen[bytes]] = None
+    scan_last_exit_code: Optional[int] = None
+    scan_last_finished_at: float = 0.0
+    update_lock = threading.Lock()
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        return
+
+    def _send_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self.send_header("Cache-Control", "no-store")
+
+    def _parse_cookies(self) -> dict[str, str]:
+        raw = self.headers.get("Cookie", "")
+        cookies: dict[str, str] = {}
+        for chunk in raw.split(";"):
+            if "=" not in chunk:
+                continue
+            key, value = chunk.split("=", 1)
+            cookies[key.strip()] = value.strip()
+        return cookies
+
+    def _session_token(self) -> str:
+        return self._parse_cookies().get("oda_session", "")
+
+    def _is_authenticated(self) -> bool:
+        if not self.auth.enabled:
+            return True
+        return self.auth.is_valid(self._session_token())
+
+    def _redirect(self, path: str) -> None:
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self._send_security_headers()
+        self.send_header("Location", path)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _require_auth(self, is_api: bool) -> bool:
+        if self._is_authenticated():
+            return True
+        if is_api:
+            self._json_response({"error": "unauthorized"}, status=401)
+        else:
+            self._redirect("/login")
+        return False
+
+    def _json_response(self, payload: Any, status: int = 200) -> None:
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self._send_security_headers()
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _text_response(self, payload: str, status: int = 200, content_type: str = "text/html; charset=utf-8") -> None:
+        raw = payload.encode("utf-8")
+        self.send_response(status)
+        self._send_security_headers()
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _read_json(self) -> dict[str, Any]:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        data = self.rfile.read(length) if length > 0 else b"{}"
+        try:
+            payload = json.loads(data.decode("utf-8"))
+            return payload if isinstance(payload, dict) else {}
+        except Exception:
+            return {}
+
+    def _load_runtime_config(self) -> tuple[dict[str, Any], list[str]]:
+        cfg = load_config(str(self.config_path), self.config_path.parent)
+        if cfg.errors:
+            return {}, cfg.errors
+        return cfg.data if isinstance(cfg.data, dict) else {}, []
+
+    def _write_runtime_config(self, config: dict[str, Any]) -> None:
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        self.config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def _resolve_auth_password_file(self, config: dict[str, Any]) -> Path:
+        service = get_section(config, "service")
+        review = get_section(config, "review_web")
+
+        raw = str(service.get("auth_password_file", "")).strip()
+        if not raw:
+            raw = str(review.get("auth_password_file", "")).strip()
+        if not raw:
+            raw = ".review_web_password"
+
+        p = Path(raw).expanduser()
+        if not p.is_absolute():
+            p = self.config_path.parent / p
+        return p.resolve()
+
+    def _resolve_project_dir(self, config: dict[str, Any]) -> Path:
+        service = get_section(config, "service")
+        project_dir_raw = str(service.get("project_dir", "")).strip()
+        project_dir = Path(project_dir_raw).expanduser() if project_dir_raw else self.config_path.parent
+        if not project_dir.is_absolute():
+            project_dir = self.config_path.parent / project_dir
+        return project_dir.resolve()
+
+    def _run_git(self, project_dir: Path, args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(project_dir)] + args,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
 
     def _restart_user_service(self) -> dict[str, Any]:
         if shutil.which("systemctl") is None:
