@@ -962,22 +962,7 @@ function rowMarkup(row) {
             </div>
         </td>
     </tr>`;
-                .edit-fields-vertical {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 8px;
-                }
-                .edit-field label {
-                    font-size: 13px;
-                    font-weight: 600;
-                    color: var(--muted);
-                    display: flex;
-                    flex-direction: column;
-                    gap: 2px;
-                }
-                .edit-field {
-                    margin-bottom: 2px;
-                }
+    </tr>`;
         <td class=\"col-file\">
             <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
             <div class=\"mini\">${esc(row.source_preview || row.source)}</div>
