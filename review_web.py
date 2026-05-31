@@ -745,28 +745,7 @@ HTML_PAGE = """<!doctype html>
             <h1>Dokumente zur Prüfung</h1>
             <div class=\"meta\" id=\"meta\"></div>
             <div class="activity idle" id="activity-indicator">Systemstatus: Leerlauf</div>
-            <div class="actions">
-                <button onclick="loadConfig()">Neu laden</button>
-                <button class="primary" onclick="saveConfig()">Speichern</button>
-                <button onclick="window.location.href='/'">Zurück zur Prüfung</button>
-            </div>
-            <div class="actions">
-                <button class="danger" onclick="resetReviewState()">Review zurücksetzen</button>
-            </div>
 
-            <script>
-            async function resetReviewState() {
-                if (!confirm('Wirklich alle Review-Einträge löschen?')) return;
-                status('Setze Review-State zurück...');
-                const res = await fetch('/api/reset-review-state', { method: 'POST' });
-                const payload = await res.json();
-                if (!res.ok || payload.ok === false) {
-                    status(payload.error || 'Reset fehlgeschlagen', 'err');
-                    return;
-                }
-                status('Review-State geleert.', 'ok');
-            }
-            </script>
             </div>
 
 
