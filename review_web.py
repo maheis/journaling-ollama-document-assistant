@@ -1725,49 +1725,49 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        if parsed.path == "/api/reset-review-state":
-            oda_debug("API: /api/reset-review-state RESET aufgerufen")
-            try:
-                import os
-                # Dynamische Pfade aus Konfiguration
-                state_file = self.store.paths.state_file
-                log_file = self.store.paths.log_file
-                logs_dirs = set()
-                # logs/-Verzeichnis im Projektordner
-                logs_dirs.add((log_file.parent / "logs").resolve())
-                # logs/-Verzeichnis im Standarddatenverzeichnis
-                default_data_dir = Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs")).resolve()
-                logs_dirs.add(default_data_dir)
-                # logs/-Verzeichnis relativ zum state_file
-                logs_dirs.add((state_file.parent / "logs").resolve())
-                # logs/-Verzeichnis relativ zum log_file
-                logs_dirs.add((log_file.parent).resolve())
-                # review_state.json leeren und In-Memory-Cache resetten
-                empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
-                with open(state_file, "w", encoding="utf-8") as f:
-                    json.dump(empty, f, ensure_ascii=False, indent=2)
-                self.store.state = empty
-                self.store.aliases = {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
-                oda_debug("RESET: state und aliases geleert")
-                # Logfiles in allen relevanten logs/-Verzeichnissen löschen
-                deleted_logs = []
-                for logs_dir in logs_dirs:
-                    if logs_dir.exists() and logs_dir.is_dir():
-                        for log in logs_dir.glob("*_organize_log.jsonl"):
-                            try:
-                                log.unlink()
-                                deleted_logs.append(str(log))
-                                oda_debug(f"RESET: Logfile gelöscht: {log}")
-                            except Exception as e:
-                                oda_debug(f"RESET: Fehler beim Löschen {log}: {e}")
-                self._json_response({"ok": True, "deleted_logs": deleted_logs})
-            except Exception as exc:
-                oda_debug(f"RESET: Fehler: {exc}")
-                self._json_response({"ok": False, "error": str(exc)}, status=500)
-            return
-        # ...existing code for other POST endpoints...
+    # def do_POST(self):
+    #     parsed = urlparse(self.path)
+    #     if parsed.path == "/api/reset-review-state":
+    #         oda_debug("API: /api/reset-review-state RESET aufgerufen")
+    #         try:
+    #             import os
+    #             # Dynamische Pfade aus Konfiguration
+    #             state_file = self.store.paths.state_file
+    #             log_file = self.store.paths.log_file
+    #             logs_dirs = set()
+    #             # logs/-Verzeichnis im Projektordner
+    #             logs_dirs.add((log_file.parent / "logs").resolve())
+    #             # logs/-Verzeichnis im Standarddatenverzeichnis
+    #             default_data_dir = Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs")).resolve()
+    #             logs_dirs.add(default_data_dir)
+    #             # logs/-Verzeichnis relativ zum state_file
+    #             logs_dirs.add((state_file.parent / "logs").resolve())
+    #             # logs/-Verzeichnis relativ zum log_file
+    #             logs_dirs.add((log_file.parent).resolve())
+    #             # review_state.json leeren und In-Memory-Cache resetten
+    #             empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
+    #             with open(state_file, "w", encoding="utf-8") as f:
+    #                 json.dump(empty, f, ensure_ascii=False, indent=2)
+    #             self.store.state = empty
+    #             self.store.aliases = {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
+    #             oda_debug("RESET: state und aliases geleert")
+    #             # Logfiles in allen relevanten logs/-Verzeichnissen löschen
+    #             deleted_logs = []
+    #             for logs_dir in logs_dirs:
+    #                 if logs_dir.exists() and logs_dir.is_dir():
+    #                     for log in logs_dir.glob("*_organize_log.jsonl"):
+    #                         try:
+    #                             log.unlink()
+    #                             deleted_logs.append(str(log))
+    #                             oda_debug(f"RESET: Logfile gelöscht: {log}")
+    #                         except Exception as e:
+    #                             oda_debug(f"RESET: Fehler beim Löschen {log}: {e}")
+    #             self._json_response({"ok": True, "deleted_logs": deleted_logs})
+    #         except Exception as exc:
+    #             oda_debug(f"RESET: Fehler: {exc}")
+    #             self._json_response({"ok": False, "error": str(exc)}, status=500)
+    #         return
+    #     # ...existing code for other POST endpoints...
 
     store: ReviewStore
     auth: PasswordAuth
