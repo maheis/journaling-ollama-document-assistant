@@ -1338,11 +1338,9 @@ CONFIG_PAGE = """<!doctype html>
                 </div>
             </div>
 
+
             <div class="actions">
-                <button onclick="loadConfig()">Neu laden</button>
-                <button class="primary" onclick="saveConfig()">Speichern</button>
-                <button onclick="window.location.href='/'">Zurück zur Prüfung</button>
-                <button class="danger" onclick="resetReviewState()">Review zurücksetzen</button>
+                <button class="danger" style="background:#ff6b6b; color:#fff; border-color:#ff6b6b" onclick="resetReviewState()">Review zurücksetzen</button>
             </div>
 
             <script>
