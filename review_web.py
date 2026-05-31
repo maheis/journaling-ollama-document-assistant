@@ -81,10 +81,13 @@ def strip_to_ascii(text: str) -> str:
 
 
 def slugify(text: str, uppercase: bool = False) -> str:
-    text = strip_to_ascii(text)
+    # Erlaubt: Buchstaben, Zahlen, Umlaute, Leerzeichen, - _ . ()
     text = text.strip()
-    text = re.sub(r"[^A-Za-z0-9]+", "_", text)
-    text = re.sub(r"_+", "_", text).strip("_")
+    # Ersetze alle Zeichen, die nicht erlaubt sind, durch _
+    # Erlaubt: a-zA-Z0-9äöüÄÖÜßéèàâêôëïçÉÈÀÂÊÔËÏÇ -_.()
+    text = re.sub(r'[^a-zA-Z0-9äöüÄÖÜßéèàâêôëïçÉÈÀÂÊÔËÏÇ\-_.() ]+', '_', text)
+    # Mehrfache _ zusammenfassen und führende/trailing _ entfernen
+    text = re.sub(r'_+', '_', text).strip('_')
     if not text:
         text = "unbekannt"
     if uppercase:
