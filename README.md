@@ -7,6 +7,7 @@ Wichtiges Prinzip:
 
 - `organize.py` erzeugt immer nur Vorschlaege (Dry-Run)
 - finales Umbenennen passiert ausschliesslich per Deploy in der Weboberflaeche
+- PDFs ohne eingebetteten Text werden bereits im Dry-Run lokal durch eine OCR-PDF ersetzt
 
 ## Quickstart (Debian)
 
@@ -351,6 +352,7 @@ python3 organize.py \
 Wichtige Hinweise:
 
 - `--apply` ist deaktiviert
+- PDFs ohne OCR-Text werden trotzdem bereits waehrend des Dry-Runs lokal in eine durchsuchbare OCR-PDF umgewandelt
 - Logs landen persistent in `./logs` (mit Datums-Prefix), z. B. `logs/2026-05-08_organize_log.jsonl`
 - bei wenig PDF-Text greift OCR
 

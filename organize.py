@@ -429,6 +429,33 @@ def build_ocr_pdf(source_pdf: Path, target_pdf: Path, ocr_lang: str) -> bool:
     return False
 
 
+def rebuild_ocr_pdf_in_place(source_pdf: Path, ocr_lang: str) -> bool:
+    temp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=f"{source_pdf.stem}_ocr_",
+            suffix=".pdf",
+            dir=str(source_pdf.parent),
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+
+        if not build_ocr_pdf(source_pdf, temp_path, ocr_lang):
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+            return False
+
+        temp_path.replace(source_pdf)
+        return True
+    except Exception:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+        return False
+
+
 def build_no_text_hint(path: Path) -> str:
     if path.suffix.lower() != ".pdf":
         return "no_text_extracted"
@@ -1132,6 +1159,12 @@ def main() -> int:
                 and extracted.used_ocr
             )
 
+            if should_rebuild_ocr_pdf and not apply_changes:
+                rebuilt_in_place = rebuild_ocr_pdf_in_place(src, args.lang)
+                if rebuilt_in_place:
+                    stats["ocr_rebuilt"] += 1
+                    should_rebuild_ocr_pdf = False
+
             in_review = cls.confidence < args.min_confidence
             # NEU: Wenn in_review und Datei ist noch nicht im review-Ordner, verschiebe sie dorthin
             if apply_changes and in_review and src.parent != review_root:
@@ -1170,6 +1203,7 @@ def main() -> int:
                     "confidence": cls.confidence,
                     "review": in_review,
                     "ocr_pdf_rebuild": should_rebuild_ocr_pdf,
+                    "ocr_lang": args.lang,
                     "keyword_fallback_applied": keyword_fallback_applied,
                     "keyword_fallback_score": keyword_fallback_score,
                     "customer_number_from_hints": customer_number_from_hints,

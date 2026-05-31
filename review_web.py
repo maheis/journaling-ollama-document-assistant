@@ -40,6 +40,12 @@ from urllib.parse import parse_qs, urlparse
 
 from assistant_config import get_section, load_config, pick, validate_config
 
+try:
+    from pypdf import PdfReader, PdfWriter
+except Exception:
+    PdfReader = None
+    PdfWriter = None
+
 
 DEFAULT_CATEGORIES = [
     "RECHNUNG",
@@ -126,6 +132,76 @@ def load_password_record(path: Path) -> str:
     except Exception:
         return raw
     return hashed
+
+
+def build_ocr_pdf(source_pdf: Path, target_pdf: Path, ocr_lang: str) -> bool:
+    if not (shutil.which("pdftoppm") and shutil.which("tesseract")):
+        return False
+
+    page_pdfs: list[Path] = []
+    try:
+        with tempfile.TemporaryDirectory(prefix="ocr_rebuild_") as tmpdir:
+            tmp_path = Path(tmpdir)
+            image_prefix = tmp_path / "page"
+
+            render = subprocess.run(
+                ["pdftoppm", "-png", str(source_pdf), str(image_prefix)],
+                capture_output=True,
+                text=True,
+                timeout=600,
+                check=False,
+            )
+            if render.returncode != 0:
+                return False
+
+            images = sorted(tmp_path.glob("page-*.png"))
+            if not images:
+                return False
+
+            for idx, img_path in enumerate(images, start=1):
+                outbase = tmp_path / f"ocr_page_{idx:04d}"
+                ocr = subprocess.run(
+                    ["tesseract", str(img_path), str(outbase), "-l", ocr_lang, "pdf"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    check=False,
+                )
+                page_pdf = Path(f"{outbase}.pdf")
+                if ocr.returncode == 0 and page_pdf.exists():
+                    page_pdfs.append(page_pdf)
+
+            if not page_pdfs:
+                return False
+
+            if len(page_pdfs) == 1:
+                shutil.copy2(page_pdfs[0], target_pdf)
+                return target_pdf.exists()
+
+            if shutil.which("pdfunite"):
+                merge = subprocess.run(
+                    ["pdfunite", *[str(p) for p in page_pdfs], str(target_pdf)],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    check=False,
+                )
+                if merge.returncode == 0 and target_pdf.exists():
+                    return True
+
+            if PdfReader is not None and PdfWriter is not None:
+                writer = PdfWriter()
+                for page_pdf in page_pdfs:
+                    reader = PdfReader(str(page_pdf))
+                    for page in reader.pages:
+                        writer.add_page(page)
+                with target_pdf.open("wb") as f:
+                    writer.write(f)
+                return target_pdf.exists()
+    except Exception:
+        return False
+
+    return False
 
 
 def strip_to_ascii(text: str) -> str:
@@ -438,6 +514,11 @@ class ReviewStore:
 
                 item_id = entry_id_for_event(event)
                 if item_id in entries:
+                    entry = entries[item_id]
+                    if "ocr_pdf_rebuild" not in entry:
+                        entry["ocr_pdf_rebuild"] = bool(event.get("ocr_pdf_rebuild", False))
+                    if not str(entry.get("ocr_lang", "")).strip():
+                        entry["ocr_lang"] = str(event.get("ocr_lang", "deu") or "deu").strip() or "deu"
                     continue
 
                 default_fields = {
@@ -459,6 +540,8 @@ class ReviewStore:
                     "edited": dict(default_fields),
                     "confidence": float(event.get("confidence", 0.0) or 0.0),
                     "review": bool(event.get("review", False)),
+                    "ocr_pdf_rebuild": bool(event.get("ocr_pdf_rebuild", False)),
+                    "ocr_lang": str(event.get("ocr_lang", "deu") or "deu").strip() or "deu",
                     "created_at": str(event.get("timestamp", "")),
                     "deployed_at": "",
                     "deployed_target": "",
@@ -703,7 +786,18 @@ class ReviewStore:
                 try:
                     target = self._build_target(entry)
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(src), str(target))
+                    should_rebuild_ocr_pdf = (
+                        src.suffix.lower() == ".pdf"
+                        and bool(entry.get("ocr_pdf_rebuild", False))
+                    )
+                    if should_rebuild_ocr_pdf:
+                        rebuilt = build_ocr_pdf(src, target, str(entry.get("ocr_lang", "deu") or "deu"))
+                        if rebuilt:
+                            src.unlink(missing_ok=True)
+                        else:
+                            shutil.move(str(src), str(target))
+                    else:
+                        shutil.move(str(src), str(target))
                     entry["status"] = "deployed"
                     entry["deployed_at"] = datetime.now().isoformat(timespec="seconds")
                     entry["deployed_target"] = str(target)
