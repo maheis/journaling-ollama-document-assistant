@@ -961,44 +961,6 @@ function rowMarkup(row) {
                 <button class="danger" onclick="deleteRow('${esc(row.id)}')">Löschen</button>
             </div>
         </td>
-    </tr>
-    </tr>
-        <td class=\"col-file\">
-            <a class=\"filelink\" target=\"_blank\" href=\"/file?id=${encodeURIComponent(row.id)}\">${esc(row.source_name)}</a>
-            <div class=\"mini\">${esc(row.source_preview || row.source)}</div>
-            <div>${badge}</div>
-            ${missing}
-        </td>
-        <td><span class=\"pill ${statusClass}\">${esc(statusLabel)}</span></td>
-        <td>${Number(row.confidence || 0).toFixed(2)}</td>
-        <td>
-            <input list=\"sender-mem\" name=\"sender\" value=\"${esc(row.edited.sender || '')}\" />
-            <div class=\"mini\">LLM: ${esc(row.default.sender || '')}</div>
-        </td>
-        <td>
-            <select name=\"category\">${categoryOptions(row.edited.category || 'SONSTIGES')}</select>
-            <div class=\"mini\">LLM: ${esc(row.default.category || '')}</div>
-        </td>
-        <td>
-            <input list=\"customer_number-mem\" name=\"customer_number\" value=\"${esc(row.edited.customer_number || '')}\" />
-            <div class=\"mini\">LLM: ${esc(row.default.customer_number || '')}</div>
-        </td>
-        <td>
-            <input list=\"title-mem\" name=\"title\" value=\"${esc(row.edited.title || '')}\" />
-            <div class=\"mini\">LLM: ${esc(row.default.title || '')}</div>
-        </td>
-        <td>
-            <input name=\"date\" value=\"${esc(row.edited.date || '')}\" placeholder=\"YYYY-MM-DD\" />
-            <div class=\"mini\">LLM: ${esc(row.default.date || '')}</div>
-        </td>
-        <td class=\"mini\">${esc(row.target_preview || '')}</td>
-        <td>
-            <div class=\"row-actions\">
-                <button onclick=\"saveRow('${esc(row.id)}')\" ${deployDisabled}>Speichern</button>
-                <button class=\"primary\" onclick=\"deployRow('${esc(row.id)}')\" ${deployDisabled}>Ausführen</button>
-                <button class=\"danger\" onclick=\"deleteRow('${esc(row.id)}')\">Löschen</button>
-            </div>
-        </td>
     </tr>`;
 }
 
