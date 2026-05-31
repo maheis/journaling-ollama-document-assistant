@@ -1131,7 +1131,7 @@ def main() -> int:
             stats["skipped_open_review"] += 1
             event.update({"status": "skipped", "reason": "open_review_entry"})
             write_log(log_path, event)
-            emit(f"[SKIP] {src.name}: bereits in offener Review", run_log_path)
+            emit(f"[SKIP/REVIEW] {src.name}: bereits in review_state/offenem Review", run_log_path)
             continue
 
         try:
