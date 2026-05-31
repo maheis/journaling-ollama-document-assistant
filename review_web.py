@@ -1902,6 +1902,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
 
             oda_debug(f"[CONFIG] Erfolgreich gespeichert: config_path={self.config_path}, auth_password_file={auth_password_file}")
+
             self._json_response(
                 {
                     "ok": True,
@@ -1911,8 +1912,6 @@ class Handler(BaseHTTPRequestHandler):
                 }
             )
             return
-            timeout=timeout,
-        )
 
     def _restart_user_service(self) -> dict[str, Any]:
         if shutil.which("systemctl") is None:
