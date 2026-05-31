@@ -745,11 +745,26 @@ HTML_PAGE = """<!doctype html>
             <h1>Dokumente zur Prüfung</h1>
             <div class=\"meta\" id=\"meta\"></div>
             <div class="activity idle" id="activity-indicator">Systemstatus: Leerlauf</div>
-            <div class=\"actions\">
-                <button onclick=\"reloadData()\">Neu laden</button>
-                <button id=\"trigger-scan-btn\" onclick=\"triggerScan()\">Scan jetzt starten</button>
-                <button id=\"stop-scan-btn\" class=\"danger\" onclick=\"stopScan()\" disabled>Überprüfung stoppen</button>
-                <button class=\"secondary\" onclick=\"saveEdits()\">Änderungen speichern</button>
+            <div class="actions">
+                <button onclick="loadConfig()">Neu laden</button>
+                <button class="primary" onclick="saveConfig()">Speichern</button>
+                <button onclick="window.location.href='/'">Zurück zur Prüfung</button>
+                <button class="danger" onclick="resetReviewState()">Review zurücksetzen</button>
+            </div>
+
+            <script>
+            async function resetReviewState() {
+                if (!confirm('Wirklich alle Review-Einträge löschen?')) return;
+                status('Setze Review-State zurück...');
+                const res = await fetch('/api/reset-review-state', { method: 'POST' });
+                const payload = await res.json();
+                if (!res.ok || payload.ok === false) {
+                    status(payload.error || 'Reset fehlgeschlagen', 'err');
+                    return;
+                }
+                status('Review-State geleert.', 'ok');
+            }
+            </script>
                 <button class=\"primary\" onclick=\"deployAll()\">Ausführung starten</button>
                 <button onclick=\"window.location.href='/config'\">Konfiguration</button>
                 <label class="filter-box">
@@ -1628,6 +1643,17 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
+            if parsed.path == "/api/reset-review-state":
+                # Leere review_state.json
+                try:
+                    state_file = self.store.paths.state_file
+                    empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
+                    with open(state_file, "w", encoding="utf-8") as f:
+                        json.dump(empty, f, ensure_ascii=False, indent=2)
+                    self._json_response({"ok": True})
+                except Exception as exc:
+                    self._json_response({"ok": False, "error": str(exc)}, status=500)
+                return
     store: ReviewStore
     auth: PasswordAuth
     config_path: Path

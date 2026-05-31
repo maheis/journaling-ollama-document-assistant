@@ -101,7 +101,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-confidence", type=float, default=0.85, help="Confidence threshold for auto-sort")
     parser.add_argument("--max-text-chars", type=int, default=6000, help="Max chars sent to the model")
     parser.add_argument("--sorted-dir", default="", help="Legacy subfolder for categorized files (default empty = output-root directly)")
-    parser.add_argument("--review-dir", default="_review", help="Folder for low-confidence files (relative to input)")
+    # Review-Ordner ist immer 'review' im Input-Verzeichnis, Option bleibt für Kompatibilität erhalten, wird aber ignoriert
+    parser.add_argument("--review-dir", default="review", help="(IGNORED) Review folder is always 'review' in input dir")
     parser.add_argument("--log-file", default="logs/organize_log.jsonl", help="Path to JSONL log")
     parser.add_argument("--run-log-file", default="logs/organize_run.log", help="Path to plain-text run log (mirrors console output)")
     parser.add_argument("--category-hints-file", default="category_hints.json", help="JSON file with keywords per category")
@@ -863,12 +864,15 @@ def plan_target_path(
 
 
 def iter_input_files(input_dir: Path, sorted_dir_name: str, review_dir_name: str):
+    review_folder = input_dir / "review"
     for p in input_dir.rglob("*"):
         if not p.is_file():
             continue
 
-        # Avoid re-processing generated outputs and hidden files.
-        if sorted_dir_name in p.parts or review_dir_name in p.parts:
+        # Überspringe Dateien im review-Ordner oder in generierten Output-Ordnern
+        if review_folder in p.parents:
+            continue
+        if sorted_dir_name in p.parts:
             continue
         if any(part.startswith(".") for part in p.parts):
             continue
@@ -958,7 +962,8 @@ def main() -> int:
         output_root = (Path.cwd() / output_root).resolve()
 
     sorted_root = output_root / args.sorted_dir if str(args.sorted_dir).strip() else output_root
-    review_root = output_root / args.review_dir
+    # Review-Ordner ist immer 'review' in der Inbox
+    review_root = input_dir / "review"
     log_path = build_dated_log_path(args.log_file, date_prefix, "organize_log.jsonl")
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
