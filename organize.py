@@ -1050,6 +1050,7 @@ def main() -> int:
     )
 
     for src in files:
+
         stats["seen"] += 1
         src_resolved = str(src.resolve())
         event = {
@@ -1058,6 +1059,7 @@ def main() -> int:
             "mode": "apply" if apply_changes else "dry-run",
         }
 
+        # NEU: Überspringe jede Datei, deren absoluter Pfad bereits in open_review_sources steht
         if src_resolved in open_review_sources:
             stats["skipped_open_review"] += 1
             event.update({"status": "skipped", "reason": "open_review_entry"})
