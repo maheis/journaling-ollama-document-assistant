@@ -1003,6 +1003,7 @@ HTML_PAGE = """<!doctype html>
             <div class=\"actions\">
                 <button class="primary" onclick="deployAll()">Ausführung starten</button>
                 <button onclick="window.location.href='/config'">Konfiguration</button>
+                <button onclick="window.location.href='/logs'">Logfiles</button>
                 <label class="filter-box">
                     Status-Filter
                     <select id="status-filter" onchange="applyFilter()">
@@ -1795,6 +1796,220 @@ loadConfig();
 """
 
 
+LOGS_PAGE = """<!doctype html>
+<html lang=\"de\">
+<head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>Logfiles - Dokumente zur Prüfung</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --bg2: #151926;
+            --card: #1c2233;
+            --card2: #1a2030;
+            --ink: #e8edf7;
+            --muted: #9aa6bd;
+            --accent: #23c4a8;
+            --line: #2b3449;
+            --ok: #55d187;
+            --err: #ff6b6b;
+            --field: #111827;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            color: var(--ink);
+            background: radial-gradient(circle at top right, #20263a 0%, var(--bg) 42%), var(--bg2);
+        }
+        .wrap { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .top, .layout {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+        }
+        .top { padding: 16px; margin-bottom: 16px; }
+        h1 { margin: 0 0 8px 0; font-size: 24px; }
+        .meta { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        button {
+            border: 1px solid var(--line);
+            background: #1a2131;
+            color: var(--ink);
+            border-radius: 10px;
+            padding: 9px 12px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button.primary { background: var(--accent); border-color: var(--accent); color: #071a18; }
+        .layout {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            min-height: 70vh;
+            overflow: hidden;
+        }
+        .sidebar {
+            border-right: 1px solid var(--line);
+            background: var(--card2);
+            padding: 12px;
+        }
+        .content {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .status { min-height: 18px; font-size: 14px; }
+        .status.ok { color: var(--ok); }
+        .status.err { color: var(--err); }
+        .files { display: flex; flex-direction: column; gap: 8px; }
+        .file-item {
+            width: 100%;
+            text-align: left;
+            padding: 10px 12px;
+            background: #151c2a;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+        }
+        .file-item.active {
+            border-color: var(--accent);
+            background: #182a27;
+        }
+        .file-name { font-weight: 700; margin-bottom: 4px; word-break: break-word; }
+        .file-meta { font-size: 12px; color: var(--muted); }
+        .viewer-meta { color: var(--muted); font-size: 13px; }
+        pre {
+            margin: 0;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #0b1018;
+            color: #d8e0f0;
+            padding: 14px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: "IBM Plex Mono", "Cascadia Code", monospace;
+            font-size: 13px;
+            line-height: 1.45;
+            min-height: 55vh;
+        }
+        @media (max-width: 900px) {
+            .layout { grid-template-columns: 1fr; }
+            .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+        }
+    </style>
+</head>
+<body>
+    <div class=\"wrap\">
+        <div class=\"top\">
+            <h1>Logfiles</h1>
+            <div class=\"meta\" id=\"meta\"></div>
+            <div class=\"actions\">
+                <button class=\"primary\" onclick=\"reloadLogs()\">Neu laden</button>
+                <button onclick=\"window.location.href='/'\">Zurück zur Prüfung</button>
+            </div>
+            <div class=\"status\" id=\"status\"></div>
+        </div>
+
+        <div class=\"layout\">
+            <div class=\"sidebar\">
+                <div class=\"files\" id=\"files\"></div>
+            </div>
+            <div class=\"content\">
+                <div class=\"viewer-meta\" id=\"viewer-meta\"></div>
+                <pre id=\"viewer\">Lade Logfiles...</pre>
+            </div>
+        </div>
+    </div>
+
+<script>
+let LOG_FILES = [];
+let CURRENT_LOG = '';
+
+function esc(v) {
+    return String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+}
+
+function status(text, cls = '') {
+    const el = document.getElementById('status');
+    el.textContent = text;
+    el.className = 'status ' + cls;
+}
+
+function formatBytes(bytes) {
+    const value = Number(bytes || 0);
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderFiles() {
+    const container = document.getElementById('files');
+    if (!LOG_FILES.length) {
+        container.innerHTML = '<div class="file-meta">Keine Logfiles gefunden.</div>';
+        return;
+    }
+    container.innerHTML = LOG_FILES.map(file => `
+        <button class="file-item ${file.name === CURRENT_LOG ? 'active' : ''}" onclick="loadLog('${esc(file.name)}')">
+            <div class="file-name">${esc(file.name)}</div>
+            <div class="file-meta">${esc(file.modified_at || '-')} | ${esc(formatBytes(file.size || 0))}</div>
+        </button>
+    `).join('');
+}
+
+async function reloadLogs() {
+    status('Lade Dateiliste...');
+    const res = await fetch('/api/log-files');
+    const payload = await res.json();
+    if (!res.ok) {
+        status(payload.error || 'Log-Dateiliste konnte nicht geladen werden.', 'err');
+        return;
+    }
+    LOG_FILES = payload.files || [];
+    document.getElementById('meta').textContent = `Log-Verzeichnis: ${payload.directory || '-'} | Dateien: ${LOG_FILES.length}`;
+    if (!CURRENT_LOG && payload.selected) {
+        CURRENT_LOG = payload.selected;
+    }
+    if (CURRENT_LOG && !LOG_FILES.some(file => file.name === CURRENT_LOG)) {
+        CURRENT_LOG = payload.selected || '';
+    }
+    renderFiles();
+    if (CURRENT_LOG) {
+        await loadLog(CURRENT_LOG, false);
+    } else {
+        document.getElementById('viewer').textContent = 'Keine Logfiles gefunden.';
+        document.getElementById('viewer-meta').textContent = '';
+        status('Keine Logfiles gefunden.', 'ok');
+    }
+}
+
+async function loadLog(name, updateStatus = true) {
+    CURRENT_LOG = name;
+    renderFiles();
+    if (updateStatus) {
+        status(`Lade ${name}...`);
+    }
+    const res = await fetch(`/api/log-file?name=${encodeURIComponent(name)}`);
+    const payload = await res.json();
+    if (!res.ok) {
+        status(payload.error || 'Logfile konnte nicht geladen werden.', 'err');
+        return;
+    }
+    document.getElementById('viewer').textContent = payload.content || '';
+    const truncated = payload.truncated ? ' | Anzeige gekürzt auf letzte 1 MiB' : '';
+    document.getElementById('viewer-meta').textContent = `${payload.name} | ${payload.modified_at || '-'} | ${formatBytes(payload.size || 0)}${truncated}`;
+    status(`Logfile geladen: ${payload.name}`, 'ok');
+}
+
+reloadLogs();
+</script>
+</body>
+</html>
+"""
+
+
 import os
 LOGIN_PAGE = """<!doctype html>
 <html lang=\"de\">
@@ -1984,6 +2199,77 @@ class Handler(BaseHTTPRequestHandler):
         if cfg.errors:
             return {}, cfg.errors
         return cfg.data if isinstance(cfg.data, dict) else {}, []
+
+    def _logs_dir(self) -> Path:
+        return self.store.paths.log_file.parent.resolve()
+
+    def _list_log_files(self) -> list[Path]:
+        logs_dir = self._logs_dir()
+        if not logs_dir.exists() or not logs_dir.is_dir():
+            return []
+
+        files = [
+            path for path in logs_dir.iterdir()
+            if path.is_file() and path.suffix.lower() in {".log", ".jsonl", ".txt"}
+        ]
+        return sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)
+
+    def _resolve_log_file(self, name: str) -> Optional[Path]:
+        clean_name = Path(str(name or "")).name
+        if not clean_name:
+            files = self._list_log_files()
+            return files[0] if files else None
+
+        candidate = (self._logs_dir() / clean_name).resolve()
+        if candidate.parent != self._logs_dir() or not candidate.exists() or not candidate.is_file():
+            return None
+        return candidate
+
+    def _log_files_payload(self) -> dict[str, Any]:
+        files = self._list_log_files()
+        return {
+            "directory": str(self._logs_dir()),
+            "selected": files[0].name if files else "",
+            "files": [
+                {
+                    "name": path.name,
+                    "size": path.stat().st_size,
+                    "modified_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds"),
+                }
+                for path in files
+            ],
+        }
+
+    def _read_log_file_payload(self, name: str) -> tuple[dict[str, Any], int]:
+        path = self._resolve_log_file(name)
+        if path is None:
+            return {"error": "log_not_found"}, 404
+
+        try:
+            file_size = path.stat().st_size
+            max_bytes = 1024 * 1024
+            with path.open("rb") as f:
+                if file_size > max_bytes:
+                    f.seek(-max_bytes, os.SEEK_END)
+                    raw = f.read()
+                    truncated = True
+                else:
+                    raw = f.read()
+                    truncated = False
+            content = raw.decode("utf-8", errors="replace")
+        except Exception as exc:
+            return {"error": f"log_read_failed: {exc}"}, 500
+
+        return (
+            {
+                "name": path.name,
+                "size": file_size,
+                "modified_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds"),
+                "truncated": truncated,
+                "content": content,
+            },
+            200,
+        )
 
     def _write_runtime_config(self, config: dict[str, Any]) -> None:
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2404,6 +2690,12 @@ class Handler(BaseHTTPRequestHandler):
             self._text_response(CONFIG_PAGE)
             return
 
+        if parsed.path == "/logs":
+            if not self._require_auth(is_api=False):
+                return
+            self._text_response(LOGS_PAGE)
+            return
+
         if parsed.path == "/api/pending":
             if not self._require_auth(is_api=True):
                 return
@@ -2448,6 +2740,21 @@ class Handler(BaseHTTPRequestHandler):
                     },
                 }
             )
+            return
+
+        if parsed.path == "/api/log-files":
+            if not self._require_auth(is_api=True):
+                return
+            self._json_response(self._log_files_payload())
+            return
+
+        if parsed.path == "/api/log-file":
+            if not self._require_auth(is_api=True):
+                return
+            params = parse_qs(parsed.query)
+            name = (params.get("name") or [""])[0]
+            payload, status_code = self._read_log_file_payload(name)
+            self._json_response(payload, status=status_code)
             return
 
         if parsed.path == "/api/logout":
