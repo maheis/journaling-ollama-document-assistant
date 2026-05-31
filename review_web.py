@@ -749,26 +749,7 @@ HTML_PAGE = """<!doctype html>
             </div>
 
 
-            <div class="actions">
-                <button onclick="loadConfig()">Neu laden</button>
-                <button class="primary" onclick="saveConfig()">Speichern</button>
-                <button onclick="window.location.href='/'">Zurück zur Prüfung</button>
-                <button class="danger" onclick="resetReviewState()">Review zurücksetzen</button>
-            </div>
 
-            <script>
-            async function resetReviewState() {
-                if (!confirm('Wirklich alle Review-Einträge löschen?')) return;
-                status('Setze Review-State zurück...');
-                const res = await fetch('/api/reset-review-state', { method: 'POST' });
-                const payload = await res.json();
-                if (!res.ok || payload.ok === false) {
-                    status(payload.error || 'Reset fehlgeschlagen', 'err');
-                    return;
-                }
-                status('Review-State geleert.', 'ok');
-            }
-            </script>
                 <button class=\"primary\" onclick=\"deployAll()\">Ausführung starten</button>
                 <button onclick=\"window.location.href='/config'\">Konfiguration</button>
                 <label class="filter-box">
