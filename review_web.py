@@ -1357,12 +1357,40 @@ CONFIG_PAGE = """<!doctype html>
                 </div>
             </div>
 
-            <div class=\"actions\">
-                <button onclick=\"loadConfig()\">Neu laden</button>
-                <button class=\"primary\" onclick=\"saveConfig()\">Speichern</button>
-                <button onclick=\"window.location.href='/'\">Zurück zur Prüfung</button>
+            <div class="actions">
+                <button onclick="loadConfig()">Neu laden</button>
+                <button class="primary" onclick="saveConfig()">Speichern</button>
+                <button onclick="window.location.href='/'">Zurück zur Prüfung</button>
+                <button class="danger" onclick="resetReviewState()">Review zurücksetzen</button>
             </div>
 
+            <script>
+            async function resetReviewState() {
+                if (!confirm('Wirklich alle Review-Einträge löschen?')) return;
+                status('Setze Review-State zurück...');
+                const res = await fetch('/api/reset-review-state', { method: 'POST' });
+                const payload = await res.json();
+                if (!res.ok || payload.ok === false) {
+                    status(payload.error || 'Reset fehlgeschlagen', 'err');
+                    return;
+                }
+                status('Review-State geleert.', 'ok');
+            }
+            </script>
+                <button class=\"primary\" onclick=\"deployAll()\">Ausführung starten</button>
+                <button onclick=\"window.location.href='/config'\">Konfiguration</button>
+                <label class="filter-box">
+                    Status-Filter
+                    <select id="status-filter" onchange="applyFilter()">
+                        <option value="all">Alle</option>
+                        <option value="open" selected>Offen (pending/saved/missing)</option>
+                        <option value="pending">Pending</option>
+                        <option value="saved">Saved</option>
+                        <option value="missing">Missing</option>
+                        <option value="deployed">Ausgeführt</option>
+                    </select>
+                </label>
+            </div>
             <div class=\"status\" id=\"status\"></div>
         </div>
     </div>
@@ -1451,7 +1479,7 @@ async function restartService() {
     const payload = await res.json();
     if (!res.ok || payload.ok === false) {
         const details = payload.details ? ` (${payload.details})` : '';
-        status((payload.message || 'Dienstneustart fehlgeschlagen') + details, 'err');
+        status((payload.error || payload.message || 'Dienstneustart fehlgeschlagen') + details, 'err');
         return;
     }
     status(payload.message || 'Dienst wurde neu gestartet.', 'ok');
