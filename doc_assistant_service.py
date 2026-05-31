@@ -141,6 +141,8 @@ def build_organize_cmd(args: argparse.Namespace, project_dir: Path) -> list[str]
         "--input",
         args.input,
         "--dry-run",
+        "--review-state-file",
+        args.state_file,
         "--field-aliases-file",
         args.field_aliases_file,
     ]

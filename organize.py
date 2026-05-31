@@ -7,7 +7,7 @@ Features:
 - Local Ollama JSON classification (category/title/date/confidence)
 - Dry-run suggestions for web-based review/deploy workflow
 - Move low-confidence files to review folder
-- Rename with collision handling
+- Rename with collision handlinghttps://github.com/settings/copilot/features?utm_source=vscode
 """
 
 from __future__ import annotations

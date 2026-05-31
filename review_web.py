@@ -2015,6 +2015,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("service.input is required to run scan")
 
         field_aliases_file = str(service.get("field_aliases_file", "")).strip() or "field_aliases.json"
+        review_state_file = str(service.get("state_file", "")).strip() or "review_state.json"
         python_bin = str(service.get("python", "")).strip() or sys.executable
         model = str(service.get("model", "")).strip()
         output = str(service.get("output", "")).strip()
@@ -2029,6 +2030,8 @@ class Handler(BaseHTTPRequestHandler):
             "--dry-run",
             "--field-aliases-file",
             field_aliases_file,
+            "--review-state-file",
+            review_state_file,
         ]
         if model:
             cmd.extend(["--model", model])
