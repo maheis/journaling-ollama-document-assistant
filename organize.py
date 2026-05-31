@@ -140,13 +140,15 @@ def strip_to_ascii(text: str) -> str:
 
 
 def slugify(text: str, uppercase: bool = False) -> str:
-    text = strip_to_ascii(text)
+    # Erlaubt: Buchstaben, Zahlen, Umlaute, Leerzeichen, - _ . ()
     text = text.strip()
-    text = re.sub(r"[^A-Za-z0-9]+", "_", text)
-    text = re.sub(r"_+", "_", text).strip("_")
+    text = re.sub(r'[^a-zA-Z0-9äöüÄÖÜßéèàâêôëïçÉÈÀÂÊÔËÏÇ\-_.() ]+', '_', text)
+    text = re.sub(r'_+', '_', text).strip('_')
     if not text:
         text = "unbekannt"
-    return text.upper() if uppercase else text.lower()
+    if uppercase:
+        return text.upper()
+    return text
 
 
 def _parse_date_from_text(date_text: str) -> Optional[str]:
@@ -918,8 +920,6 @@ def load_open_review_sources(state_file: Path) -> set[str]:
     open_review_sources: set[str] = set()
     for entry in entries.values():
         if not isinstance(entry, dict):
-            continue
-        if not bool(entry.get("review", False)):
             continue
         status = str(entry.get("status", "pending") or "pending").strip().lower()
         if status == "deployed":
