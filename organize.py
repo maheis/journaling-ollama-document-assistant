@@ -1131,7 +1131,15 @@ def main() -> int:
             )
 
             in_review = cls.confidence < args.min_confidence
-            if apply_changes:
+            # NEU: Wenn in_review und Datei ist noch nicht im review-Ordner, verschiebe sie dorthin
+            if apply_changes and in_review and src.parent != review_root:
+                review_target = review_root / src.name
+                review_target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src), str(review_target))
+                src = review_target
+                target = review_target
+
+            elif apply_changes:
                 if should_rebuild_ocr_pdf:
                     rebuilt = build_ocr_pdf(src, target, args.lang)
                     if rebuilt:
@@ -1180,10 +1188,10 @@ def main() -> int:
             )
         except Exception as exc:
             stats["errors"] += 1
-            event.update({"status": "error", "error": str(exc)})
+            event.update({"status": "error", "reason": str(exc)})
             write_log(log_path, event)
             emit(f"[ERROR] {src.name}: {exc}", run_log_path)
-
+            continue
         if args.sleep_between_files > 0:
             time.sleep(args.sleep_between_files)
 
