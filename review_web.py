@@ -1435,7 +1435,7 @@ async function runUpdate() {
 }
 
 async function restartService() {
-    status('Starte Dienst neu...');
+    status('Starte Dienst neu... bitte Seite neuladen!', 'warn');
     const res = await fetch('/api/service-restart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
