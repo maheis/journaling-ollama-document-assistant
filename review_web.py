@@ -1449,11 +1449,7 @@ async function restartService() {
     }
     status(payload.message || 'Dienst wurde neu gestartet. Seite wird neu geladen...', 'ok');
     setTimeout(() => {
-        if (window.location.pathname !== '/') {
-            window.location.href = '/';
-        } else {
-            window.location.reload();
-        }
+        window.location.href = '/';
     }, 1200);
 }
 
