@@ -730,8 +730,22 @@ HTML_PAGE = """<!doctype html>
         a.filelink { color: #67c7ff; text-decoration: none; }
         a.filelink:hover { text-decoration: underline; }
         /* .learn styles removed */
-        .row-actions { display: flex; gap: 8px; margin-top: 8px; }
-        .row-actions button { padding: 6px 8px; font-size: 12px; border-radius: 8px; }
+        .row-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+        }
+        .row-actions button {
+            padding: 6px 8px;
+            font-size: 12px;
+            border-radius: 8px;
+            margin-bottom: 4px;
+        }
+        .grid {
+            overflow-x: auto;
+        }
     </style>
 </head>
 <body>
