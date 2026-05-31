@@ -628,7 +628,7 @@ HTML_PAGE = """<!doctype html>
             color: var(--ink);
             background: radial-gradient(circle at top right, #20263a 0%, var(--bg) 42%), var(--bg2);
         }
-        .wrap { max-width: 1460px; margin: 0 auto; padding: 18px; }
+        .wrap { width: 100vw; max-width: 100vw; margin: 0; padding: 18px; }
         .top {
             background: var(--card);
             border: 1px solid var(--line);
