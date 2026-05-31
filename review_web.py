@@ -750,19 +750,7 @@ HTML_PAGE = """<!doctype html>
 
 
 
-                <button class=\"primary\" onclick=\"deployAll()\">Ausführung starten</button>
-                <button onclick=\"window.location.href='/config'\">Konfiguration</button>
-                <label class="filter-box">
-                    Status-Filter
-                    <select id="status-filter" onchange="applyFilter()">
-                        <option value="all">Alle</option>
-                        <option value="open" selected>Offen (pending/saved/missing)</option>
-                        <option value="pending">Pending</option>
-                        <option value="saved">Saved</option>
-                        <option value="missing">Missing</option>
-                        <option value="deployed">Ausgeführt</option>
-                    </select>
-                </label>
+                <!-- Mainpage-Buttons entfernt: Deploy, Konfiguration, Status-Filter -->
             </div>
             <div class=\"status\" id=\"status\"></div>
         </div>
