@@ -1725,6 +1725,69 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/reset-review-state":
+            oda_debug("API: /api/reset-review-state RESET aufgerufen")
+            try:
+                import os
+                # Dynamische Pfade aus Konfiguration
+                state_file = self.store.paths.state_file
+                log_file = self.store.paths.log_file
+                logs_dirs = set()
+                # logs/-Verzeichnis im Projektordner
+                logs_dirs.add((log_file.parent / "logs").resolve())
+                # logs/-Verzeichnis im Standarddatenverzeichnis
+                default_data_dir = Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs")).resolve()
+                logs_dirs.add(default_data_dir)
+                # logs/-Verzeichnis relativ zum state_file
+                logs_dirs.add((state_file.parent / "logs").resolve())
+                # logs/-Verzeichnis relativ zum log_file
+                logs_dirs.add((log_file.parent).resolve())
+                # review_state.json leeren und In-Memory-Cache resetten
+                empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
+                with open(state_file, "w", encoding="utf-8") as f:
+                    json.dump(empty, f, ensure_ascii=False, indent=2)
+                self.store.state = empty
+                self.store.aliases = {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
+                oda_debug("RESET: state und aliases geleert")
+                # Logfiles in allen relevanten logs/-Verzeichnissen löschen
+                deleted_logs = []
+                for logs_dir in logs_dirs:
+                    if logs_dir.exists() and logs_dir.is_dir():
+                        for log in logs_dir.glob("*_organize_log.jsonl"):
+                            try:
+                                log.unlink()
+                                deleted_logs.append(str(log))
+                                oda_debug(f"RESET: Logfile gelöscht: {log}")
+                            except Exception as e:
+                                oda_debug(f"RESET: Fehler beim Löschen {log}: {e}")
+                self._json_response({"ok": True, "deleted_logs": deleted_logs})
+            except Exception as exc:
+                oda_debug(f"RESET: Fehler: {exc}")
+                self._json_response({"ok": False, "error": str(exc)}, status=500)
+            return
+        # ...existing code for other POST endpoints...
+
+    store: ReviewStore
+    auth: PasswordAuth
+    config_path: Path
+    scan_lock = threading.Lock()
+    scan_proc: Optional[subprocess.Popen[bytes]] = None
+    scan_last_exit_code: Optional[int] = None
+    scan_last_finished_at: float = 0.0
+    update_lock = threading.Lock()
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        return
+
+    def _send_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self.send_header("Cache-Control", "no-store")
+
     def _parse_cookies(self) -> dict[str, str]:
         raw = self.headers.get("Cookie", "")
         cookies: dict[str, str] = {}
@@ -1743,6 +1806,13 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return self.auth.is_valid(self._session_token())
 
+    def _redirect(self, path: str) -> None:
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self._send_security_headers()
+        self.send_header("Location", path)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def _require_auth(self, is_api: bool) -> bool:
         if self._is_authenticated():
             return True
@@ -1751,7 +1821,15 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._redirect("/login")
         return False
-    # ...existing code for Handler, including do_POST and all methods...
+
+    def _json_response(self, payload: Any, status: int = 200) -> None:
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self._send_security_headers()
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
 
     def _text_response(self, payload: str, status: int = 200, content_type: str = "text/html; charset=utf-8") -> None:
         raw = payload.encode("utf-8")
