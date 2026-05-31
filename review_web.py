@@ -25,6 +25,7 @@ import signal
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unicodedata
@@ -212,16 +213,17 @@ class ReviewStore:
             entry = self.state["entries"].get(entry_id)
             if not entry:
                 return False
-            del self.state["entries"][entry_id]
-            self._save_state()
+
             log_files = self._log_files_for_sync()
-            changed = False
+            pending_writes: list[tuple[Path, str]] = []
             for log_file in log_files:
                 try:
                     lines = log_file.read_text(encoding="utf-8").splitlines()
                 except Exception:
                     continue
+
                 new_lines = []
+                changed = False
                 for line in lines:
                     try:
                         event = json.loads(line)
@@ -232,11 +234,35 @@ class ReviewStore:
                         changed = True
                         continue
                     new_lines.append(line)
+
                 if changed:
+                    pending_writes.append((log_file, "\n".join(new_lines) + "\n"))
+
+            temp_paths: list[Path] = []
+            try:
+                for log_file, content in pending_writes:
+                    with tempfile.NamedTemporaryFile(
+                        "w",
+                        encoding="utf-8",
+                        dir=str(log_file.parent),
+                        delete=False,
+                    ) as temp_file:
+                        temp_file.write(content)
+                        temp_path = Path(temp_file.name)
+                    temp_paths.append(temp_path)
+
+                for (log_file, _), temp_path in zip(pending_writes, temp_paths):
+                    temp_path.replace(log_file)
+            except Exception as exc:
+                for temp_path in temp_paths:
                     try:
-                        log_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+                        temp_path.unlink(missing_ok=True)
                     except Exception:
                         pass
+                raise RuntimeError(f"Log-Synchronisierung fehlgeschlagen: {exc}") from exc
+
+            del self.state["entries"][entry_id]
+            self._save_state()
             return True
 
     def __init__(self, paths: Paths, categories: list[str]) -> None:
@@ -1704,46 +1730,6 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        if parsed.path == "/api/reset-review-state":
-            try:
-                import os
-                # Dynamische Pfade aus Konfiguration
-                state_file = self.store.paths.state_file
-                log_file = self.store.paths.log_file
-                logs_dirs = set()
-                # logs/-Verzeichnis im Projektordner
-                logs_dirs.add((log_file.parent / "logs").resolve())
-                # logs/-Verzeichnis im Standarddatenverzeichnis
-                default_data_dir = Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs")).resolve()
-                logs_dirs.add(default_data_dir)
-                # logs/-Verzeichnis relativ zum state_file
-                logs_dirs.add((state_file.parent / "logs").resolve())
-                # logs/-Verzeichnis relativ zum log_file
-                logs_dirs.add((log_file.parent).resolve())
-                # review_state.json leeren und In-Memory-Cache resetten
-                empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
-                with open(state_file, "w", encoding="utf-8") as f:
-                    json.dump(empty, f, ensure_ascii=False, indent=2)
-                self.store.state = empty
-                self.store.aliases = {"sender": {}, "category": {}, "customer_number": {}, "title": {}}
-                # Logfiles in allen relevanten logs/-Verzeichnissen löschen
-                deleted_logs = []
-                for logs_dir in logs_dirs:
-                    if logs_dir.exists() and logs_dir.is_dir():
-                        for log in logs_dir.glob("*_organize_log.jsonl"):
-                            try:
-                                log.unlink()
-                                deleted_logs.append(str(log))
-                            except Exception:
-                                pass
-                self._json_response({"ok": True, "deleted_logs": deleted_logs})
-            except Exception as exc:
-                self._json_response({"ok": False, "error": str(exc)}, status=500)
-            return
-        # ...existing code for other POST endpoints...
-
     store: ReviewStore
     auth: PasswordAuth
     config_path: Path
@@ -2400,7 +2386,11 @@ class Handler(BaseHTTPRequestHandler):
             if not entry_id:
                 self._json_response({"ok": False, "error": "Kein Eintrag angegeben"}, status=400)
                 return
-            ok = self.store.delete_entry_everywhere(entry_id)
+            try:
+                ok = self.store.delete_entry_everywhere(entry_id)
+            except Exception as exc:
+                self._json_response({"ok": False, "error": f"Loeschen fehlgeschlagen: {exc}"}, status=500)
+                return
             if ok:
                 self._json_response({"ok": True})
             else:
