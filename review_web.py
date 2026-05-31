@@ -87,7 +87,9 @@ def slugify(text: str, uppercase: bool = False) -> str:
     text = re.sub(r"_+", "_", text).strip("_")
     if not text:
         text = "unbekannt"
-    return text.upper() if uppercase else text.lower()
+    if uppercase:
+        return text.upper()
+    return text
 
 
 def ensure_date(date_text: Optional[str], source_name: str = "") -> str:
