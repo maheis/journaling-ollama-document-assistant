@@ -1647,13 +1647,25 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/reset-review-state":
-            # Leere review_state.json
+            # Vollständiger Reset: review_state.json leeren und alle Logfiles löschen
             try:
                 state_file = self.store.paths.state_file
+                logs_dir = state_file.parent / "logs"
                 empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
+                # review_state.json leeren
                 with open(state_file, "w", encoding="utf-8") as f:
                     json.dump(empty, f, ensure_ascii=False, indent=2)
-                self._json_response({"ok": True})
+                # Logfiles löschen
+                deleted_logs = []
+                if logs_dir.exists() and logs_dir.is_dir():
+                    for log in logs_dir.glob("*_organize_log.jsonl"):
+                        try:
+                            log.unlink()
+                            deleted_logs.append(str(log))
+                        except Exception as log_exc:
+                            # Fehler beim Löschen einzelner Logs ignorieren, aber melden
+                            pass
+                self._json_response({"ok": True, "deleted_logs": deleted_logs})
             except Exception as exc:
                 self._json_response({"ok": False, "error": str(exc)}, status=500)
             return
