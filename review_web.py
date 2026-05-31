@@ -1654,6 +1654,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json_response({"ok": False, "error": str(exc)}, status=500)
             return
+
     store: ReviewStore
     auth: PasswordAuth
     config_path: Path
