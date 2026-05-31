@@ -1643,17 +1643,17 @@ async function doLogin(event) {
 
 
 class Handler(BaseHTTPRequestHandler):
-            if parsed.path == "/api/reset-review-state":
-                # Leere review_state.json
-                try:
-                    state_file = self.store.paths.state_file
-                    empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
-                    with open(state_file, "w", encoding="utf-8") as f:
-                        json.dump(empty, f, ensure_ascii=False, indent=2)
-                    self._json_response({"ok": True})
-                except Exception as exc:
-                    self._json_response({"ok": False, "error": str(exc)}, status=500)
-                return
+        if parsed.path == "/api/reset-review-state":
+            # Leere review_state.json
+            try:
+                state_file = self.store.paths.state_file
+                empty = {"entries": {}, "value_memory": {"sender": [], "category": [], "customer_number": [], "title": []}}
+                with open(state_file, "w", encoding="utf-8") as f:
+                    json.dump(empty, f, ensure_ascii=False, indent=2)
+                self._json_response({"ok": True})
+            except Exception as exc:
+                self._json_response({"ok": False, "error": str(exc)}, status=500)
+            return
     store: ReviewStore
     auth: PasswordAuth
     config_path: Path
