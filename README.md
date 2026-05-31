@@ -211,9 +211,10 @@ Wenn du bereits per `install.sh` installiert hast, update so:
 
 ```bash
 cd ~/.local/share/ollama-document-assistant
+systemctl --user stop ollama-document-assistant.service
 git pull --ff-only
 bash ./install.sh --install-dir ~/.local/share/ollama-document-assistant
-systemctl --user restart ollama-document-assistant.service
+systemctl --user start ollama-document-assistant.service
 systemctl --user status ollama-document-assistant.service
 ```
 

@@ -9,8 +9,8 @@
         "session_ttl_seconds": 28800
     },
     "service": {
-        "input": "./inbox",
-        "output": "./output",
+        "input": "~/lama/inbox",
+        "output": "~/lama/outbox",
         "model": "qwen2.5:7b-instruct",
         "interval_seconds": 300,
         "host": "127.0.0.1",
