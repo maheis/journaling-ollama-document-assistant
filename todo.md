@@ -44,6 +44,6 @@
 [x] lernen
 [x] outbox ordner
 [x] anzeige wieviele dateien noch zu scannen sind
-[ ] scrollbars für die tabelle...
+[x] scrollbars für die tabelle...
 [ ] dokumentation webproxy
 [ ] dokumentation prüfen und beschreibung erweitern!
