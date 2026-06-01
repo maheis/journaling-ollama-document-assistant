@@ -885,6 +885,7 @@ HTML_PAGE = """<!doctype html>
             --warn: #f7b955;
             --err: #ff6b6b;
             --field: #111827;
+            --table-head-top: 8px;
         }
         * { box-sizing: border-box; }
         body {
@@ -949,7 +950,15 @@ HTML_PAGE = """<!doctype html>
         }
         table { width: 100%; border-collapse: collapse; min-width: 1450px; table-layout: auto; }
         th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
-        th { position: sticky; top: 0; background: #20283a; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+        th {
+            position: sticky;
+            top: var(--table-head-top);
+            z-index: 1;
+            background: #20283a;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
         tr:hover td { background: #232c40; }
         th.col-file, td.col-file {
             white-space: normal;
@@ -1269,6 +1278,12 @@ function applyFilter() {
     status(`Filter aktiv: ${CURRENT_FILTER}. Angezeigt: ${shownCount}.`);
 }
 
+function updateTableHeaderOffset() {
+    const top = document.querySelector('.top');
+    const offset = top ? Math.ceil(top.getBoundingClientRect().height) + 16 : 8;
+    document.documentElement.style.setProperty('--table-head-top', `${offset}px`);
+}
+
 async function reloadData(skipScanStatus = false) {
     status('Lade Daten...');
     const res = await fetch('/api/pending');
@@ -1287,6 +1302,7 @@ async function reloadData(skipScanStatus = false) {
 
     document.querySelectorAll('datalist').forEach(n => n.remove());
     document.body.insertAdjacentHTML('beforeend', dlSender + dlCustomer + dlTitle);
+    updateTableHeaderOffset();
     status(`Bereit. ${openCount} offene Einträge, ${shownCount} angezeigt.`);
     if (!skipScanStatus) {
         await refreshScanStatus();
@@ -1432,6 +1448,9 @@ async function deployRow(id) {
     status(msg);
     await reloadData();
 }
+
+window.addEventListener('resize', updateTableHeaderOffset);
+window.addEventListener('load', updateTableHeaderOffset);
 
 reloadData();
 setInterval(refreshScanStatus, 4000);
