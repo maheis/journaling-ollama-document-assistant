@@ -984,6 +984,8 @@ HTML_PAGE = """<!doctype html>
             <div class="activity idle" id="activity-indicator">Systemstatus: Leerlauf</div>
             <div class=\"actions\">
                 <button class="primary" onclick="deployAll()">Ausführung starten</button>
+                <button id="trigger-scan-btn" onclick="triggerScan()">Scan starten</button>
+                <button id="stop-scan-btn" onclick="stopScan()" disabled>Scan stoppen</button>
                 <button onclick="window.location.href='/config'">Konfiguration</button>
                 <button onclick="window.location.href='/logs'">Logfiles</button>
                 <label class="filter-box">
