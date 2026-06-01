@@ -253,7 +253,7 @@ UI-Funktionen:
 4. global oder pro Zeile deployen
 5. Status je Eintrag: `PENDING`, `SAVED`, `MISSING`, `DEPLOYED`
 6. Status-Filter: `Alle`, `Offen`, `Pending`, `Saved`, `Missing`, `Deployed`
-7. Lern-Haken pro Feld (Alias-Lernen)
+7. Manuelle Aenderungen an Sender, Kategorie, Kunden-Nr und Titel werden beim Deploy automatisch als Alias gelernt
 8. Manuellen Dry-Run-Scan direkt im UI starten (`Scan jetzt starten`)
 
 Hinweis:

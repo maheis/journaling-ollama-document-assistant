@@ -713,14 +713,12 @@ class ReviewStore:
             self._save_state()
             return {"updated": updated}
 
-    def _learn_aliases(self, entry: dict[str, Any], learn_fields: dict[str, bool]) -> int:
+    def _learn_aliases(self, entry: dict[str, Any]) -> int:
         count = 0
         default = entry.get("default", {})
         edited = entry.get("edited", {})
 
         for field in ("sender", "category", "customer_number", "title"):
-            if not bool(learn_fields.get(field, False)):
-                continue
             src_value = str(default.get(field, "")).strip()
             dst_value = str(edited.get(field, "")).strip()
             if not src_value or not dst_value or src_value == dst_value:
@@ -766,6 +764,7 @@ class ReviewStore:
                     continue
 
                 try:
+                    learned += self._learn_aliases(entry)
                     target = self._build_target(entry)
                     target.parent.mkdir(parents=True, exist_ok=True)
                     should_rebuild_ocr_pdf = (
@@ -793,6 +792,7 @@ class ReviewStore:
             return {
                 "applied": applied,
                 "missing": missing,
+                "learned": learned,
                 "errors": errors,
             }
 
@@ -1326,7 +1326,7 @@ async function deployAll() {
         body: JSON.stringify({ rows })
     });
     const payload = await res.json();
-    const msg = `Ausführung fertig: verschoben=${payload.applied}, fehlend=${payload.missing}, fehler=${(payload.errors || []).length}`;
+    const msg = `Ausführung fertig: verschoben=${payload.applied}, gelernt=${payload.learned || 0}, fehlend=${payload.missing}, fehler=${(payload.errors || []).length}`;
     status(msg);
     await reloadData();
 }
@@ -1344,7 +1344,7 @@ async function deployRow(id) {
         body: JSON.stringify({ rows: [rowPayload(tr)] })
     });
     const payload = await res.json();
-    const msg = `Zeile ausgeführt: verschoben=${payload.applied}, fehlend=${payload.missing}, fehler=${(payload.errors || []).length}`;
+    const msg = `Zeile ausgeführt: verschoben=${payload.applied}, gelernt=${payload.learned || 0}, fehlend=${payload.missing}, fehler=${(payload.errors || []).length}`;
     status(msg);
     await reloadData();
 }
