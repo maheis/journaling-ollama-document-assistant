@@ -89,13 +89,13 @@ Fuer den Dienst `doc_assistant_service.py` sind vor allem diese Werte relevant:
 - `service.output`: Outbox-Basis (Sortierung direkt dort, Review in `_review`)
 - `service.model`: Ollama-Modell
 - `service.schedule_mode`: `interval`, `inbox-trigger` oder `daily`
-- `service.interval_minutes`: Scan-Intervall in Minuten
+- `service.interval_minutes`: Scan-Intervall in Minuten, immer ab voller Stunde auf festen Slots (`*/N`)
 - `service.daily_time`: Uhrzeit fuer den taeglichen Lauf (`HH:MM`, nur bei `daily`)
 - `service.inbox_poll_seconds`: Polling-Intervall fuer Inbox-Trigger (nur bei `inbox-trigger`)
 
 Scheduler-Modi:
 
-1. `interval` (wie bisher): alle `service.interval_minutes` Minuten
+1. `interval`: feste Minuten-Slots ab voller Stunde, z. B. bei `15` immer um `:00`, `:15`, `:30`, `:45`
 2. `inbox-trigger`: prueft die Inbox dauerhaft und startet bei neuen/geaenderten Dateien sofort
 3. `daily`: startet einmal pro Tag zur konfigurierten `service.daily_time`
 

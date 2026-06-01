@@ -85,6 +85,21 @@ def next_daily_run_ts(now_ts: float, hour: int, minute: int) -> float:
     return candidate.timestamp()
 
 
+def next_interval_run_ts(now_ts: float, interval_minutes: int) -> float:
+    from datetime import timedelta
+
+    now = datetime.fromtimestamp(now_ts)
+    current_hour = now.replace(minute=0, second=0, microsecond=0)
+    for slot_minute in range(0, 60, interval_minutes):
+        candidate = current_hour + timedelta(minutes=slot_minute)
+        if candidate.timestamp() >= now_ts:
+            return candidate.timestamp()
+
+    candidate = current_hour + timedelta(hours=1)
+
+    return candidate.timestamp()
+
+
 def inbox_snapshot(path: Path) -> dict[str, tuple[int, int]]:
     snapshot: dict[str, tuple[int, int]] = {}
     if not path.exists() or not path.is_dir():
@@ -268,7 +283,7 @@ def main() -> int:
         emit(f"Daily run time: {args.daily_time}")
 
     try:
-        next_scan_at = 0.0
+        next_scan_at = next_interval_run_ts(time.time(), args.interval_minutes)
         next_daily_at = next_daily_run_ts(time.time(), daily_hour, daily_minute)
         last_inbox_snapshot = inbox_snapshot(Path(args.input).expanduser())
         if args.schedule_mode == "inbox-trigger" and last_inbox_snapshot:
@@ -288,7 +303,7 @@ def main() -> int:
             if args.schedule_mode == "interval":
                 if now >= next_scan_at:
                     run_organize_once(args, project_dir)
-                    next_scan_at = now + float(args.interval_minutes * 60)
+                    next_scan_at = next_interval_run_ts(time.time(), args.interval_minutes)
                 time.sleep(1.0)
                 continue
 

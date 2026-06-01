@@ -1501,7 +1501,7 @@ CONFIG_PAGE = """<!doctype html>
                     </div>
 
                     <div class=\"field\">
-                        <label for=\"interval\">Scan-Intervall Minuten (service.interval_minutes)</label>
+                        <label for=\"interval\">Scan-Intervall Minuten ab voller Stunde (service.interval_minutes)</label>
                         <input id=\"interval\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"5\" />
                     </div>
 
