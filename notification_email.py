@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import smtplib
 from dataclasses import dataclass
+from datetime import datetime
 from email.message import EmailMessage
 from typing import Any
 
@@ -52,21 +53,7 @@ def load_email_notification_settings(config: dict[str, Any]) -> EmailNotificatio
     )
 
 
-def send_review_notification(
-    config: dict[str, Any],
-    *,
-    new_review_count: int,
-    scan_source: str,
-    review_url: str,
-    input_path: str,
-) -> EmailNotificationResult:
-    if new_review_count <= 0:
-        return EmailNotificationResult(sent=False, reason="no_new_review_entries")
-
-    settings = load_email_notification_settings(config)
-    if not settings.enabled:
-        return EmailNotificationResult(sent=False, reason="disabled")
-
+def _send_email(settings: EmailNotificationSettings, *, subject: str, body: str) -> EmailNotificationResult:
     missing = []
     if not settings.recipient:
         missing.append("notifications.email.to")
@@ -82,20 +69,6 @@ def send_review_notification(
     recipients = [part.strip() for part in settings.recipient.split(",") if part.strip()]
     if not recipients:
         return EmailNotificationResult(sent=False, reason="missing:notifications.email.to")
-
-    subject = f"{settings.subject_prefix} {new_review_count} neue Dokumente zur Prüfung"
-    body = "\n".join(
-        [
-            "Ein Scan wurde abgeschlossen.",
-            "",
-            f"Neue Dokumente zur Prüfung: {new_review_count}",
-            f"Scan-Quelle: {scan_source}",
-            f"Inbox: {input_path}",
-            f"Weboberfläche: {review_url}",
-            "",
-            "Bitte die neuen Vorschläge in der Weboberfläche prüfen.",
-        ]
-    )
 
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -122,3 +95,53 @@ def send_review_notification(
         return EmailNotificationResult(sent=False, reason=str(exc))
 
     return EmailNotificationResult(sent=True)
+
+
+def send_test_email(config: dict[str, Any], *, review_url: str, input_path: str) -> EmailNotificationResult:
+    settings = load_email_notification_settings(config)
+    subject = f"{settings.subject_prefix} Testmail"
+    body = "\n".join(
+        [
+            "Dies ist eine Testmail des Ollama Document Assistant.",
+            "",
+            f"Zeitpunkt: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"Inbox: {input_path}",
+            f"Weboberfläche: {review_url}",
+            "",
+            "Wenn diese Mail ankommt, funktioniert die aktuelle SMTP-Konfiguration.",
+        ]
+    )
+    # Testmails sollen auch dann möglich sein, wenn der automatische Versand deaktiviert ist.
+    settings.enabled = True
+    return _send_email(settings, subject=subject, body=body)
+
+
+def send_review_notification(
+    config: dict[str, Any],
+    *,
+    new_review_count: int,
+    scan_source: str,
+    review_url: str,
+    input_path: str,
+) -> EmailNotificationResult:
+    if new_review_count <= 0:
+        return EmailNotificationResult(sent=False, reason="no_new_review_entries")
+
+    settings = load_email_notification_settings(config)
+    if not settings.enabled:
+        return EmailNotificationResult(sent=False, reason="disabled")
+
+    subject = f"{settings.subject_prefix} {new_review_count} neue Dokumente zur Prüfung"
+    body = "\n".join(
+        [
+            "Ein Scan wurde abgeschlossen.",
+            "",
+            f"Neue Dokumente zur Prüfung: {new_review_count}",
+            f"Scan-Quelle: {scan_source}",
+            f"Inbox: {input_path}",
+            f"Weboberfläche: {review_url}",
+            "",
+            "Bitte die neuen Vorschläge in der Weboberfläche prüfen.",
+        ]
+    )
+    return _send_email(settings, subject=subject, body=body)

@@ -39,7 +39,7 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 from assistant_config import get_section, load_config, pick, validate_config
-from notification_email import send_review_notification
+from notification_email import send_review_notification, send_test_email
 
 try:
     from pypdf import PdfReader, PdfWriter
@@ -1174,8 +1174,6 @@ function rowMarkup(row) {
             <div class="edit-fields-vertical">
                 <div class="edit-field">
                     <label>Sender
-                        <input list="sender-mem" name="sender" value="${esc(row.edited.sender || '')}" />
-                    </label>
                     <div class="mini">LLM: ${esc(row.default.sender || '')}</div>
                 </div>
                 <div class="edit-field">
@@ -1683,6 +1681,9 @@ CONFIG_PAGE = """<!doctype html>
                         </select>
                     </div>
                 </div>
+                <div class=\"actions\">
+                    <button onclick=\"sendTestEmail()\">Testmail senden</button>
+                </div>
             </div>
 
             <div class=\"section\">
@@ -1789,6 +1790,25 @@ function byId(id) {
     return document.getElementById(id);
 }
 
+function currentEmailNotificationPayload() {
+    return {
+        notifications: {
+            email: {
+                enabled: byId('notify-enabled').value,
+                to: byId('notify-to').value,
+                from: byId('notify-from').value,
+                subject_prefix: byId('notify-subject-prefix').value,
+                smtp_host: byId('notify-host').value,
+                smtp_port: byId('notify-port').value,
+                smtp_username: byId('notify-user').value,
+                smtp_password: byId('notify-password').value,
+                smtp_starttls: byId('notify-starttls').value,
+                smtp_ssl: byId('notify-ssl').value
+            }
+        }
+    };
+}
+
 function setUpdateUI(payload) {
     const info = byId('update-info');
     const btn = byId('run-update-btn');
@@ -1872,6 +1892,22 @@ async function restartService() {
     }, 1000);
 }
 
+async function sendTestEmail() {
+    status('Sende Testmail...');
+    const res = await fetch('/api/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentEmailNotificationPayload())
+    });
+    const payload = await res.json();
+    if (!res.ok || payload.ok === false) {
+        const details = payload.reason ? ` (${payload.reason})` : '';
+        status((payload.error || payload.message || 'Testmail fehlgeschlagen') + details, 'err');
+        return;
+    }
+    status(payload.message || 'Testmail gesendet.', 'ok');
+}
+
 async function loadConfig() {
     status('Lade Konfiguration...');
     const res = await fetch('/api/config');
@@ -1944,20 +1980,7 @@ async function saveConfig() {
             new_password: newPassword,
             new_password_confirm: newPasswordConfirm
         },
-        notifications: {
-            email: {
-                enabled: byId('notify-enabled').value,
-                to: byId('notify-to').value,
-                from: byId('notify-from').value,
-                subject_prefix: byId('notify-subject-prefix').value,
-                smtp_host: byId('notify-host').value,
-                smtp_port: byId('notify-port').value,
-                smtp_username: byId('notify-user').value,
-                smtp_password: byId('notify-password').value,
-                smtp_starttls: byId('notify-starttls').value,
-                smtp_ssl: byId('notify-ssl').value
-            }
-        }
+        ...currentEmailNotificationPayload()
     };
 
     status('Speichere Konfiguration...');
@@ -3338,6 +3361,64 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/service-restart":
             result = self._restart_user_service()
             self._json_response(result, status=200 if result.get("ok") else 500)
+            return
+
+        if parsed.path == "/api/test-email":
+            notifications_payload = payload.get("notifications", {}) if isinstance(payload.get("notifications"), dict) else {}
+            email_payload = notifications_payload.get("email", {}) if isinstance(notifications_payload.get("email"), dict) else {}
+
+            try:
+                notify_port = int(email_payload.get("smtp_port", 587) or 587)
+            except ValueError:
+                self._json_response({"ok": False, "error": "notifications.email.smtp_port must be an integer"}, status=400)
+                return
+            if notify_port < 1:
+                self._json_response({"ok": False, "error": "notifications.email.smtp_port must be >= 1"}, status=400)
+                return
+            notify_starttls = parse_bool_value(email_payload.get("smtp_starttls", True), True)
+            notify_ssl = parse_bool_value(email_payload.get("smtp_ssl", False), False)
+            if notify_starttls and notify_ssl:
+                self._json_response({"ok": False, "error": "notifications.email.smtp_starttls and smtp_ssl cannot both be true"}, status=400)
+                return
+
+            config, load_errors = self._load_runtime_config()
+            if load_errors:
+                self._json_response({"ok": False, "error": "config_load_failed", "errors": load_errors}, status=500)
+                return
+
+            if not isinstance(config, dict):
+                config = {}
+            notifications = config.get("notifications")
+            if not isinstance(notifications, dict):
+                notifications = {}
+            existing_email = notifications.get("email") if isinstance(notifications.get("email"), dict) else {}
+            smtp_password = str(email_payload.get("smtp_password", ""))
+            if not smtp_password:
+                smtp_password = str(existing_email.get("smtp_password", ""))
+            notifications["email"] = {
+                "enabled": True,
+                "to": str(email_payload.get("to", "")).strip(),
+                "from": str(email_payload.get("from", "")).strip(),
+                "smtp_host": str(email_payload.get("smtp_host", "")).strip(),
+                "smtp_port": notify_port,
+                "smtp_username": str(email_payload.get("smtp_username", "")).strip(),
+                "smtp_password": smtp_password,
+                "smtp_starttls": notify_starttls,
+                "smtp_ssl": notify_ssl,
+                "subject_prefix": str(email_payload.get("subject_prefix", "[ODA]")).strip() or "[ODA]",
+            }
+            config["notifications"] = notifications
+
+            result = send_test_email(
+                config,
+                review_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
+                input_path=str(get_section(config, "service").get("input", "") or ""),
+            )
+            if not result.sent:
+                self._json_response({"ok": False, "error": "Testmail konnte nicht gesendet werden", "reason": result.reason}, status=400)
+                return
+
+            self._json_response({"ok": True, "message": "Testmail gesendet."})
             return
 
         if parsed.path == "/api/config":
