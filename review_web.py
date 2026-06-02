@@ -2071,7 +2071,9 @@ document.getElementById('send').addEventListener('click', async () => {
         const data = await res.json();
         document.getElementById('status').textContent = 'Fertig';
         // Ollama returns a structure; try to display sensible fields
-        if (data && data.outputs) {
+        if (data && data.text) {
+            document.getElementById('response').textContent = data.text;
+        } else if (data && data.outputs) {
             document.getElementById('response').textContent = JSON.stringify(data.outputs, null, 2);
         } else {
             document.getElementById('response').textContent = JSON.stringify(data, null, 2);
@@ -3430,13 +3432,52 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"error": "ollama_request_failed", "detail": str(exc)}, status=500)
                 return
 
+            # Try to assemble streamed NDJSON lines from Ollama into a single text
+            raw = resp.text or ""
+            assembled = None
             try:
-                data = resp.json()
+                parts = []
+                for line in raw.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except Exception:
+                        continue
+                    r = obj.get("response")
+                    if r is not None:
+                        parts.append(str(r))
+                    if obj.get("done"):
+                        # keep parsing to collect final chunks but note done
+                        pass
+                if parts:
+                    assembled = "".join(parts)
             except Exception:
-                data = {"raw": resp.text}
+                assembled = None
+
+            # Fallback: if Ollama returned a single JSON object, try parsing it
+            if assembled is None or assembled == "":
+                try:
+                    data_json = resp.json()
+                    # common key names: response, outputs, text
+                    if isinstance(data_json, dict):
+                        assembled = data_json.get("response") or data_json.get("text") or None
+                except Exception:
+                    assembled = assembled or None
+
+            payload_out = {"raw": raw}
+            if assembled is not None:
+                payload_out["text"] = assembled
+            else:
+                # if no assembled text, attempt to include parsed json body
+                try:
+                    payload_out["body"] = resp.json()
+                except Exception:
+                    payload_out["body"] = raw
 
             status_code = 200 if resp.status_code == 200 else 502
-            self._json_response(data, status=status_code)
+            self._json_response(payload_out, status=status_code)
             return
 
         if parsed.path == "/api/scan":
