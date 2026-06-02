@@ -51,7 +51,7 @@ def load_email_notification_settings(config: dict[str, Any]) -> EmailNotificatio
         smtp_password=str(email.get("smtp_password", "")),
         smtp_starttls=bool(email.get("smtp_starttls", True)),
         smtp_ssl=bool(email.get("smtp_ssl", False)),
-        subject_prefix=str(email.get("subject_prefix", "[ODA]")).strip() or "[ODA]",
+        subject_prefix=str(email.get("subject_prefix", "[JODA]")).strip() or "[JODA]",
     )
 
 

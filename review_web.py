@@ -1644,7 +1644,7 @@ CONFIG_PAGE = """<!doctype html>
 
                     <div class=\"field\">
                         <label for=\"notify-subject-prefix\">Betreff-Präfix</label>
-                        <input id=\"notify-subject-prefix\" placeholder=\"[ODA]\" />
+                        <input id=\"notify-subject-prefix\" placeholder=\"[JODA]\" />
                     </div>
 
                     <div class=\"field\">
@@ -1944,7 +1944,7 @@ async function loadConfig() {
     byId('notify-enabled').value = String(!!email.enabled);
     byId('notify-to').value = email.to || '';
     byId('notify-from').value = email.from || '';
-    byId('notify-subject-prefix').value = email.subject_prefix || '[ODA]';
+    byId('notify-subject-prefix').value = email.subject_prefix || '[JODA]';
     byId('notify-host').value = email.smtp_host || '';
     byId('notify-port').value = email.smtp_port ?? 587;
     byId('notify-user').value = email.smtp_username || '';
@@ -3184,7 +3184,7 @@ class Handler(BaseHTTPRequestHandler):
                             "smtp_username": str(email.get("smtp_username", "")).strip(),
                             "smtp_starttls": parse_bool_value(email.get("smtp_starttls", True), True),
                             "smtp_ssl": parse_bool_value(email.get("smtp_ssl", False), False),
-                            "subject_prefix": str(email.get("subject_prefix", "[ODA]")).strip() or "[ODA]",
+                            "subject_prefix": str(email.get("subject_prefix", "[JODA]")).strip() or "[JODA]",
                         }
                     },
                 }
@@ -3454,7 +3454,7 @@ class Handler(BaseHTTPRequestHandler):
                 "smtp_password": smtp_password,
                 "smtp_starttls": notify_starttls,
                 "smtp_ssl": notify_ssl,
-                "subject_prefix": str(email_payload.get("subject_prefix", "[ODA]")).strip() or "[ODA]",
+                "subject_prefix": str(email_payload.get("subject_prefix", "[JODA]")).strip() or "[JODA]",
             }
             config["notifications"] = notifications
 
@@ -3624,7 +3624,7 @@ class Handler(BaseHTTPRequestHandler):
                 "smtp_password": smtp_password,
                 "smtp_starttls": notify_starttls,
                 "smtp_ssl": notify_ssl,
-                "subject_prefix": str(email_payload.get("subject_prefix", "[ODA]")).strip() or "[ODA]",
+                "subject_prefix": str(email_payload.get("subject_prefix", "[JODA]")).strip() or "[JODA]",
             }
             config["service"] = service
             config["review_web"] = review

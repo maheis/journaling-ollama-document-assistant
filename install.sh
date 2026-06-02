@@ -335,7 +335,7 @@ ensure_assistant_config() {
       "smtp_password": "",
       "smtp_starttls": true,
       "smtp_ssl": false,
-      "subject_prefix": "[ODA]"
+      "subject_prefix": "[JODA]"
     }
   }
 }
