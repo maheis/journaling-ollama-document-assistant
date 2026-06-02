@@ -1005,6 +1005,7 @@ def main() -> int:
         print("[ERROR] --apply ist deaktiviert. Bitte immer Dry-Run mit organize.py und finales Umbenennen ueber review_web.py Deploy.")
         return 2
 
+    started_at = time.time()
     apply_changes = False
     apply_runtime_limits(args.process_nice, args.max_cpu_threads)
 
@@ -1260,10 +1261,12 @@ def main() -> int:
         if args.sleep_between_files > 0:
             time.sleep(args.sleep_between_files)
 
+    duration_seconds = round(time.time() - started_at, 2)
     emit("", run_log_path)
     emit("[SUMMARY]", run_log_path)
     for k, v in stats.items():
         emit(f"- {k}: {v}", run_log_path)
+    emit(f"- duration_seconds: {duration_seconds}", run_log_path)
     emit(f"- log: {log_path}", run_log_path)
     emit(f"- run_log: {run_log_path}", run_log_path)
     emit(
@@ -1280,6 +1283,7 @@ def main() -> int:
             "output": str(output_root),
             "log_file": str(log_path),
             "run_log_file": str(run_log_path),
+            "duration_seconds": duration_seconds,
             "stats": stats,
         },
     )
