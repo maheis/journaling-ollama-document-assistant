@@ -50,3 +50,4 @@
 [x] email-benachrichtigung bei neuen Dokumenten zur prüfung
 [x] joda = journaling ollama document assistant
 [x] laufzeit ausgeben
+[ ] webui für normale ki anfragen

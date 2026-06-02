@@ -37,6 +37,7 @@ from pathlib import Path
 
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
+import requests
 
 from assistant_config import get_section, load_config, pick, validate_config
 from notification_email import append_notification_debug_log, notification_debug_snapshot, send_review_notification, send_test_email
@@ -2014,6 +2015,78 @@ loadConfig();
 """
 
 
+PROMPT_PAGE = """<!doctype html>
+<html lang=\"de\">
+<head>
+        <meta charset=\"utf-8\" />
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+        <title>joda - Prompt</title>
+        <style>
+                body { font-family: Arial, sans-serif; background: #0f1117; color: #e8edf7; padding: 20px; }
+                .card { background: #1c2233; border: 1px solid #2b3449; border-radius: 8px; padding: 16px; max-width: 900px; margin: auto; }
+                textarea { width: 100%; min-height: 160px; border-radius: 6px; padding: 8px; background: #111827; color: #e8edf7; border: 1px solid #3a445f; }
+                input, select { padding: 8px; border-radius: 6px; background: #111827; color: #e8edf7; border: 1px solid #3a445f; }
+                button { padding: 8px 12px; border-radius: 8px; background: #23c4a8; color: #071a18; border: none; font-weight: 700; }
+                pre { background: #0b0d12; padding: 12px; border-radius: 6px; overflow: auto; white-space: pre-wrap; }
+        </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Interaktiver Prompt</h2>
+        <p class="mini">Sende einen Prompt an das lokal laufende Ollama-Modell (via Ollama HTTP API).</p>
+        <div style="margin-top:10px;">
+            <label>Modell: <input id="model" value="qwen2.5:7b-instruct" /></label>
+        </div>
+        <div style="margin-top:10px;">
+            <label>Prompt:</label>
+            <textarea id="prompt" placeholder="Schreibe hier deinen Prompt..."></textarea>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+            <label>Max Tokens: <input id="max_tokens" type="number" value="256" style="width:100px;" /></label>
+            <button id="send">Senden</button>
+            <div id="status" style="color:#9aa6bd;margin-left:8px;"></div>
+        </div>
+
+        <h3 style="margin-top:16px;">Antwort</h3>
+        <pre id="response">Keine Antwort yet.</pre>
+    </div>
+
+<script>
+document.getElementById('send').addEventListener('click', async () => {
+    const model = document.getElementById('model').value.trim();
+    const prompt = document.getElementById('prompt').value;
+    const max_tokens = parseInt(document.getElementById('max_tokens').value || '256', 10);
+    document.getElementById('status').textContent = 'Anfrage läuft...';
+    document.getElementById('response').textContent = '';
+    try {
+        const res = await fetch('/api/prompt', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({model, prompt, max_tokens})
+        });
+        if (!res.ok) {
+            document.getElementById('status').textContent = 'Fehler: ' + res.status;
+            document.getElementById('response').textContent = await res.text();
+            return;
+        }
+        const data = await res.json();
+        document.getElementById('status').textContent = 'Fertig';
+        // Ollama returns a structure; try to display sensible fields
+        if (data && data.outputs) {
+            document.getElementById('response').textContent = JSON.stringify(data.outputs, null, 2);
+        } else {
+            document.getElementById('response').textContent = JSON.stringify(data, null, 2);
+        }
+    } catch (e) {
+        document.getElementById('status').textContent = 'Fehler';
+        document.getElementById('response').textContent = String(e);
+    }
+});
+</script>
+</body>
+</html>
+"""
+
+
 LOGS_PAGE = """<!doctype html>
 <html lang=\"de\">
 <head>
@@ -3124,6 +3197,12 @@ class Handler(BaseHTTPRequestHandler):
             self._text_response(CONFIG_PAGE)
             return
 
+        if parsed.path == "/prompt":
+            if not self._require_auth(is_api=False):
+                return
+            self._text_response(PROMPT_PAGE)
+            return
+
         if parsed.path == "/logs":
             if not self._require_auth(is_api=False):
                 return
@@ -3328,6 +3407,36 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/deploy":
             rows = payload.get("rows", []) if isinstance(payload.get("rows"), list) else []
             self._json_response(self.store.deploy(rows))
+            return
+
+        if parsed.path == "/api/prompt":
+            # Proxy a prompt to local Ollama HTTP API
+            model = str(payload.get("model", "")).strip() or str(get_section(self._load_runtime_config()[0], "service").get("model", "qwen2.5:7b-instruct"))
+            prompt = str(payload.get("prompt", ""))
+            try:
+                max_tokens = int(payload.get("max_tokens", 256) or 256)
+            except Exception:
+                max_tokens = 256
+
+            if not prompt:
+                self._json_response({"error": "no prompt provided"}, status=400)
+                return
+
+            ollama_url = "http://127.0.0.1:11434/api/generate"
+            body = {"model": model, "prompt": prompt, "max_tokens": max_tokens}
+            try:
+                resp = requests.post(ollama_url, json=body, timeout=180)
+            except Exception as exc:
+                self._json_response({"error": "ollama_request_failed", "detail": str(exc)}, status=500)
+                return
+
+            try:
+                data = resp.json()
+            except Exception:
+                data = {"raw": resp.text}
+
+            status_code = 200 if resp.status_code == 200 else 502
+            self._json_response(data, status=status_code)
             return
 
         if parsed.path == "/api/scan":
