@@ -344,6 +344,12 @@ Log-Dateien aufraeumen:
 # Alle Organize-Logs anzeigen
 ls -lah ./logs/
 
+# Mail-Debuglog live ansehen
+tail -f ./logs/notification_debug.jsonl
+
+# Service-Log live ansehen
+journalctl --user -u joda.service -f
+
 # Logs älter als 30 Tage löschen
 find ./logs -type f -name '*_organize_*.log*' -mtime +30 -delete
 find ./logs -type f -name '*_organize_*.jsonl' -mtime +30 -delete

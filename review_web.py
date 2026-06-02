@@ -2731,7 +2731,7 @@ class Handler(BaseHTTPRequestHandler):
                 print("[WARN] Review notification skipped because organize summary is stale", flush=True)
                 return
         stats = summary.get("stats", {}) if isinstance(summary.get("stats", {}), dict) else {}
-        new_review_count = int(stats.get("review", 0) or 0)
+        new_review_count = int(stats.get("processed", 0) or 0)
         error_count = int(stats.get("errors", 0) or 0)
         result = send_review_notification(
             config,

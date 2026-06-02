@@ -243,7 +243,7 @@ def run_organize_once(args: argparse.Namespace, project_dir: Path) -> int:
         else:
             summary_finished_at = 0.0
         stats = summary.get("stats", {}) if isinstance(summary.get("stats", {}), dict) else {}
-        new_review_count = int(stats.get("review", 0) or 0)
+        new_review_count = int(stats.get("processed", 0) or 0)
         error_count = int(stats.get("errors", 0) or 0)
         is_stale = summary_finished_at + 1 < started_at
         debug_payload = {
