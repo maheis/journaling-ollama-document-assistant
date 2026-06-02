@@ -3387,6 +3387,14 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/prompt":
             model = str(payload.get("model", "")).strip() or str(get_section(self._load_runtime_config()[0], "service").get("model", "qwen2.5:7b-instruct"))
             prompt = str(payload.get("prompt", ""))
+            # enforce German-only responses by prepending an instruction
+            lang_instr = "Bitte antworte ausschließlich auf Deutsch. Antworte knapp und klar."
+            if prompt:
+                prompt = lang_instr + "\n\n" + prompt
+            # enforce German-only responses by prepending an instruction
+            lang_instr = "Bitte antworte ausschließlich auf Deutsch. Antworte knapp und klar."
+            if prompt:
+                prompt = lang_instr + "\n\n" + prompt
             try:
                 max_tokens = int(payload.get("max_tokens", 256) or 256)
             except Exception:
