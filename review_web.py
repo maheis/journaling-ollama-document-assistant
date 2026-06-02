@@ -2033,7 +2033,10 @@ PROMPT_PAGE = """<!doctype html>
 </head>
 <body>
     <div class="card">
-        <h2>Interaktiver Prompt</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h2>Interaktiver Prompt</h2>
+            <button onclick="window.location.href='/'">Zurück zur Prüfung</button>
+        </div>
         <p class="mini">Sende einen Prompt an das lokal laufende Ollama-Modell (via Ollama HTTP API).</p>
         <div style="margin-top:10px;">
             <label>Modell: <input id="model" value="qwen2.5:7b-instruct" /></label>
