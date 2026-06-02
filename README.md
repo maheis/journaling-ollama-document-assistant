@@ -1,4 +1,4 @@
-# YODA - Your Ollama Document Assistant
+# yoda - your ollama document assistant
 
 Lokale Dokument-Automatisierung mit [Ollama](https://ollama.com), OCR und Web-Review.
 Dieses Projekt ist in Zusammenarbeit mit dem Copilot entstanden.
