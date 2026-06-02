@@ -263,8 +263,8 @@ Der Dienst `doc_assistant_service.py`:
 Wann der Dienst laeuft:
 
 - nach `install.sh` standardmäßig als user-systemd Unit `joda.service`
-- beim Login des Users (WantedBy `default.target`)
-- dauerhaft auch ohne Login nur wenn User-Lingering aktiv ist (`loginctl enable-linger <user>`)
+- `install.sh` aktiviert dafür automatisch User-Lingering per `loginctl enable-linger <user>`
+- falls das nicht klappt, läuft der Dienst nur beim Login des Users (WantedBy `default.target`)
 
 Manuell starten:
 

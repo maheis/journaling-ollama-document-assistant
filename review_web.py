@@ -870,7 +870,7 @@ HTML_PAGE = """<!doctype html>
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>Dokumente zur Prüfung</title>
+    <title>joda</title>
     <style>
         :root {
             --bg: #0f1117;
@@ -1469,7 +1469,7 @@ CONFIG_PAGE = """<!doctype html>
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>Konfiguration - Dokumente zur Prüfung</title>
+    <title>joda - Konfiguration</title>
     <style>
         :root {
             --bg: #0f1117;
@@ -2019,7 +2019,7 @@ LOGS_PAGE = """<!doctype html>
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>Logfiles - Dokumente zur Prüfung</title>
+    <title>joda - Logfiles</title>
     <style>
         :root {
             --bg: #0f1117;
@@ -2234,7 +2234,7 @@ LOGIN_PAGE = """<!doctype html>
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>Login - Dokumente zur Prüfung</title>
+    <title>joda - Login</title>
     <style>
         :root {
             --bg: #0f1320;

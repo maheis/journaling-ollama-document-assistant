@@ -47,6 +47,6 @@
 [x] scrollbars für die tabelle...
 [ ] dokumentation webproxy
 [ ] dokumentation prüfen und beschreibung erweitern!
-[ ] email-benachrichtigung bei neuen Dokumenten zur prüfung
+[x] email-benachrichtigung bei neuen Dokumenten zur prüfung
 [x] joda = journaling ollama document assistant
 [x] laufzeit ausgeben

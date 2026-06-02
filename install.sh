@@ -69,6 +69,32 @@ cmd_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+enable_user_lingering() {
+  local target_user="${SUDO_USER:-${USER:-$(id -un)}}"
+  if [[ -z "$target_user" ]]; then
+    echo "[WARN] Could not determine target user for loginctl enable-linger"
+    return 1
+  fi
+
+  if ! cmd_exists loginctl; then
+    echo "[WARN] loginctl not found; joda.service will only run while the user is logged in"
+    return 1
+  fi
+
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    loginctl enable-linger "$target_user"
+    return $?
+  fi
+
+  if cmd_exists sudo; then
+    sudo loginctl enable-linger "$target_user"
+    return $?
+  fi
+
+  echo "[WARN] sudo not found; could not enable lingering for $target_user"
+  return 1
+}
+
 has_project_sources() {
   local dir="$1"
   [[ -f "$dir/organize.py" ]] &&
@@ -546,6 +572,13 @@ if [[ "$INSTALL_SYSTEMD" -eq 1 ]]; then
   write_user_service_unit
   systemctl --user daemon-reload
   systemctl --user enable joda.service
+
+  echo "[post] Enabling lingering for always-on user service"
+  if enable_user_lingering; then
+    echo "User lingering enabled; joda.service will keep running without an active login"
+  else
+    echo "[WARN] Could not enable lingering automatically; joda.service may stop after logout"
+  fi
 
   if [[ "$START_SERVICE" -eq 1 ]]; then
     systemctl --user restart joda.service
