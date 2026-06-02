@@ -3366,6 +3366,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/test-email":
             notifications_payload = payload.get("notifications", {}) if isinstance(payload.get("notifications"), dict) else {}
             email_payload = notifications_payload.get("email", {}) if isinstance(notifications_payload.get("email"), dict) else {}
+            notify_enabled = parse_bool_value(email_payload.get("enabled", False), False)
 
             try:
                 notify_port = int(email_payload.get("smtp_port", 587) or 587)
@@ -3396,7 +3397,7 @@ class Handler(BaseHTTPRequestHandler):
             if not smtp_password:
                 smtp_password = str(existing_email.get("smtp_password", ""))
             notifications["email"] = {
-                "enabled": True,
+                "enabled": notify_enabled,
                 "to": str(email_payload.get("to", "")).strip(),
                 "from": str(email_payload.get("from", "")).strip(),
                 "smtp_host": str(email_payload.get("smtp_host", "")).strip(),
@@ -3409,6 +3410,12 @@ class Handler(BaseHTTPRequestHandler):
             }
             config["notifications"] = notifications
 
+            try:
+                self._write_runtime_config(config)
+            except Exception as exc:
+                self._json_response({"ok": False, "error": f"config_write_failed: {exc}"}, status=500)
+                return
+
             result = send_test_email(
                 config,
                 review_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
@@ -3418,7 +3425,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"ok": False, "error": "Testmail konnte nicht gesendet werden", "reason": result.reason}, status=400)
                 return
 
-            self._json_response({"ok": True, "message": "Testmail gesendet."})
+            self._json_response({"ok": True, "message": "Testmail gesendet. E-Mail-Einstellungen gespeichert."})
             return
 
         if parsed.path == "/api/config":
