@@ -3381,6 +3381,69 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+            return
+
+        # Allow unauthenticated prompt API so the public prompt page can call it
+        if parsed.path == "/api/prompt":
+            model = str(payload.get("model", "")).strip() or str(get_section(self._load_runtime_config()[0], "service").get("model", "qwen2.5:7b-instruct"))
+            prompt = str(payload.get("prompt", ""))
+            try:
+                max_tokens = int(payload.get("max_tokens", 256) or 256)
+            except Exception:
+                max_tokens = 256
+
+            if not prompt:
+                self._json_response({"error": "no prompt provided"}, status=400)
+                return
+
+            ollama_url = "http://127.0.0.1:11434/api/generate"
+            body = {"model": model, "prompt": prompt, "max_tokens": max_tokens}
+            try:
+                resp = requests.post(ollama_url, json=body, timeout=180)
+            except Exception as exc:
+                self._json_response({"error": "ollama_request_failed", "detail": str(exc)}, status=500)
+                return
+
+            raw = resp.text or ""
+            assembled = None
+            try:
+                parts = []
+                for line in raw.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except Exception:
+                        continue
+                    r = obj.get("response")
+                    if r is not None:
+                        parts.append(str(r))
+                if parts:
+                    assembled = "".join(parts)
+            except Exception:
+                assembled = None
+
+            if assembled is None or assembled == "":
+                try:
+                    data_json = resp.json()
+                    if isinstance(data_json, dict):
+                        assembled = data_json.get("response") or data_json.get("text") or None
+                except Exception:
+                    assembled = assembled or None
+
+            payload_out = {"raw": raw}
+            if assembled is not None:
+                payload_out["text"] = assembled
+            else:
+                try:
+                    payload_out["body"] = resp.json()
+                except Exception:
+                    payload_out["body"] = raw
+
+            status_code = 200 if resp.status_code == 200 else 502
+            self._json_response(payload_out, status=status_code)
+            return
 
         if not self._require_auth(is_api=True):
             return
