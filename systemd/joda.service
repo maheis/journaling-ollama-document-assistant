@@ -1,0 +1,14 @@
+[Unit]
+Description=JODA (dry-run scanner + review web)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/joda
+ExecStart=%h/.local/share/joda/.venv/bin/python %h/.local/share/joda/doc_assistant_service.py --config-file %h/.local/share/joda/assistant_config.json
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
