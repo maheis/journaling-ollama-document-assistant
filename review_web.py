@@ -2374,7 +2374,6 @@ LOGIN_PAGE = """<!doctype html>
         <p>Bitte Passwort eingeben.</p>
         <input id=\"pw\" type=\"password\" autocomplete=\"current-password\" placeholder=\"Passwort\" required />
         <button type=\"submit\">Anmelden</button>
-        <button type=\"button\" onclick=\"window.location.href='/prompt'\" style=\"margin-top:8px;background:#2b3449;border:1px solid #3a445f;color:var(--ink);\">Prompt (ohne Login)</button>
         <div class=\"err\" id=\"err\"></div>
     </form>
 
@@ -3202,7 +3201,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/prompt":
-            # Allow prompt page without authentication (public entrypoint)
+            if not self._require_auth(is_api=False):
+                return
             self._text_response(PROMPT_PAGE)
             return
 
@@ -3380,77 +3380,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-            return
-            return
-
-        # Allow unauthenticated prompt API so the public prompt page can call it
-        if parsed.path == "/api/prompt":
-            model = str(payload.get("model", "")).strip() or str(get_section(self._load_runtime_config()[0], "service").get("model", "qwen2.5:7b-instruct"))
-            prompt = str(payload.get("prompt", ""))
-            # enforce German-only responses by prepending an instruction
-            lang_instr = "Bitte antworte ausschließlich auf Deutsch. Antworte knapp und klar."
-            if prompt:
-                prompt = lang_instr + "\n\n" + prompt
-            # enforce German-only responses by prepending an instruction
-            lang_instr = "Bitte antworte ausschließlich auf Deutsch. Antworte knapp und klar."
-            if prompt:
-                prompt = lang_instr + "\n\n" + prompt
-            try:
-                max_tokens = int(payload.get("max_tokens", 256) or 256)
-            except Exception:
-                max_tokens = 256
-
-            if not prompt:
-                self._json_response({"error": "no prompt provided"}, status=400)
-                return
-
-            ollama_url = "http://127.0.0.1:11434/api/generate"
-            body = {"model": model, "prompt": prompt, "max_tokens": max_tokens}
-            try:
-                resp = requests.post(ollama_url, json=body, timeout=180)
-            except Exception as exc:
-                self._json_response({"error": "ollama_request_failed", "detail": str(exc)}, status=500)
-                return
-
-            raw = resp.text or ""
-            assembled = None
-            try:
-                parts = []
-                for line in raw.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except Exception:
-                        continue
-                    r = obj.get("response")
-                    if r is not None:
-                        parts.append(str(r))
-                if parts:
-                    assembled = "".join(parts)
-            except Exception:
-                assembled = None
-
-            if assembled is None or assembled == "":
-                try:
-                    data_json = resp.json()
-                    if isinstance(data_json, dict):
-                        assembled = data_json.get("response") or data_json.get("text") or None
-                except Exception:
-                    assembled = assembled or None
-
-            payload_out = {"raw": raw}
-            if assembled is not None:
-                payload_out["text"] = assembled
-            else:
-                try:
-                    payload_out["body"] = resp.json()
-                except Exception:
-                    payload_out["body"] = raw
-
-            status_code = 200 if resp.status_code == 200 else 502
-            self._json_response(payload_out, status=status_code)
             return
 
         if not self._require_auth(is_api=True):
