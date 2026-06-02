@@ -18,7 +18,7 @@ Wichtiges Prinzip:
 ## Schnellstart
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/maheis/ollama-document-assistant/main/install.sh | bash -s -- --full-setup
+curl -fsSL https://raw.githubusercontent.com/maheis/journaling-ollama-document-assistant/main/install.sh | bash -s -- --full-setup
 ```
 
 Danach typischer Ablauf:
@@ -163,7 +163,7 @@ bash ./install.sh
 Standard-Installationspfad:
 
 ```text
-~/.local/share/ollama-document-assistant
+~/.local/share/journaling-ollama-document-assistant
 ```
 
 Vollsetup für Debian:
@@ -197,12 +197,12 @@ Hinweise:
 Wenn du bereits per `install.sh` installiert hast, update so:
 
 ```bash
-cd ~/.local/share/ollama-document-assistant
-systemctl --user stop ollama-document-assistant.service
+cd ~/.local/share/journaling-ollama-document-assistant
+systemctl --user stop journaling-ollama-document-assistant.service
 git pull --ff-only
-bash ./install.sh --install-dir ~/.local/share/ollama-document-assistant
-systemctl --user start ollama-document-assistant.service
-systemctl --user status ollama-document-assistant.service
+bash ./install.sh --install-dir ~/.local/share/journaling-ollama-document-assistant
+systemctl --user start journaling-ollama-document-assistant.service
+systemctl --user status journaling-ollama-document-assistant.service
 ```
 
 Hinweis:
@@ -212,9 +212,9 @@ Hinweis:
 Falls im Installationsordner kein `.git` vorhanden ist:
 
 ```bash
-git clone https://github.com/maheis/ollama-document-assistant.git /tmp/oda-update
-bash /tmp/oda-update/install.sh --install-dir ~/.local/share/ollama-document-assistant
-systemctl --user restart ollama-document-assistant.service
+git clone https://github.com/maheis/journaling-ollama-document-assistant.git /tmp/oda-update
+bash /tmp/oda-update/install.sh --install-dir ~/.local/share/journaling-ollama-document-assistant
+systemctl --user restart journaling-ollama-document-assistant.service
 ```
 
 ## Weboberfläche
@@ -262,7 +262,7 @@ Der Dienst `doc_assistant_service.py`:
 
 Wann der Dienst laeuft:
 
-- nach `install.sh` standardmäßig als user-systemd Unit `ollama-document-assistant.service`
+- nach `install.sh` standardmäßig als user-systemd Unit `journaling-ollama-document-assistant.service`
 - beim Login des Users (WantedBy `default.target`)
 - dauerhaft auch ohne Login nur wenn User-Lingering aktiv ist (`loginctl enable-linger <user>`)
 
@@ -274,16 +274,16 @@ python3 doc_assistant_service.py --config-file ./assistant_config.json
 
 User-systemd Unit:
 
-- Datei: `systemd/ollama-document-assistant.service`
+- Datei: `systemd/journaling-ollama-document-assistant.service`
 
 Installation:
 
 ```bash
 mkdir -p ~/.config/systemd/user
-cp ./systemd/ollama-document-assistant.service ~/.config/systemd/user/
+cp ./systemd/journaling-ollama-document-assistant.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now ollama-document-assistant.service
-systemctl --user status ollama-document-assistant.service
+systemctl --user enable --now journaling-ollama-document-assistant.service
+systemctl --user status journaling-ollama-document-assistant.service
 ```
 
 Pfade konfigurieren:
@@ -304,7 +304,7 @@ Hinweis zur Web-Konfigurationsseite:
 - danach Dienst neu starten, damit die neuen Werte aktiv werden:
 
 ```bash
-systemctl --user restart ollama-document-assistant.service
+systemctl --user restart journaling-ollama-document-assistant.service
 ```
 
 ## Modell
@@ -389,7 +389,7 @@ python3 organize.py \
 Mit Skript (empfohlen):
 
 ```bash
-bash ~/.local/share/ollama-document-assistant/uninstall.sh
+bash ~/.local/share/journaling-ollama-document-assistant/uninstall.sh
 ```
 
 Wenn du im geklonten Repository arbeitest:
@@ -401,7 +401,7 @@ bash ./uninstall.sh
 Optional (zusätzlich Modell und Ollama entfernen):
 
 ```bash
-bash ~/.local/share/ollama-document-assistant/uninstall.sh --remove-ollama --remove-models
+bash ~/.local/share/journaling-ollama-document-assistant/uninstall.sh --remove-ollama --remove-models
 ```
 
 Wenn bei der Installation ein eigener `--install-dir` verwendet wurde, rufe das Skript aus genau diesem Verzeichnis auf.
@@ -410,14 +410,14 @@ Manuell deinstallieren:
 
 ```bash
 # 1) Service stoppen/entfernen
-systemctl --user stop ollama-document-assistant.service
-systemctl --user disable ollama-document-assistant.service
-rm -f ~/.config/systemd/user/ollama-document-assistant.service
+systemctl --user stop journaling-ollama-document-assistant.service
+systemctl --user disable journaling-ollama-document-assistant.service
+rm -f ~/.config/systemd/user/journaling-ollama-document-assistant.service
 systemctl --user daemon-reload
 systemctl --user reset-failed
 
 # 2) Installationsverzeichnis entfernen
-rm -rf ~/.local/share/ollama-document-assistant
+rm -rf ~/.local/share/journaling-ollama-document-assistant
 
 # 3) Optional: Modell entfernen
 ollama rm qwen2.5:7b-instruct

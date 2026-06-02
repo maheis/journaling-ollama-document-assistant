@@ -127,7 +127,7 @@ def send_test_email(config: dict[str, Any], *, review_url: str, input_path: str)
     subject = f"{settings.subject_prefix} Testmail"
     body = "\n".join(
         [
-            "Dies ist eine Testmail des Ollama Document Assistant.",
+            "Dies ist eine Testmail des Journaling Ollama Document Assistant.",
             "",
             f"Zeitpunkt: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             f"Inbox: {input_path}",

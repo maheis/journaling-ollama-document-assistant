@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_INSTALL_DIR="$HOME/.local/share/ollama-document-assistant"
+DEFAULT_INSTALL_DIR="$HOME/.local/share/journaling-ollama-document-assistant"
 INSTALL_DIR="$DEFAULT_INSTALL_DIR"
-UNIT_PATH="$HOME/.config/systemd/user/ollama-document-assistant.service"
+UNIT_PATH="$HOME/.config/systemd/user/journaling-ollama-document-assistant.service"
 REMOVE_MODELS=0
 REMOVE_OLLAMA=0
 ASSUME_YES=0
@@ -14,7 +14,7 @@ Usage: bash ./uninstall.sh [options]
 
 Options:
   --install-dir <dir>   Installation directory to remove
-                        (default: ~/.local/share/ollama-document-assistant)
+                        (default: ~/.local/share/journaling-ollama-document-assistant)
   --remove-models       Remove Ollama models used by this project (qwen2.5:7b-instruct)
   --remove-ollama       Try to uninstall Ollama service/package as well (Debian/Ubuntu)
   --yes                 Skip confirmation prompt
@@ -22,7 +22,7 @@ Options:
 
 Examples:
   bash ./uninstall.sh
-  bash ./uninstall.sh --install-dir ~/.local/share/ollama-document-assistant --remove-models
+  bash ./uninstall.sh --install-dir ~/.local/share/journaling-ollama-document-assistant --remove-models
 USAGE
 }
 
@@ -80,7 +80,7 @@ if [[ "$INSTALL_DIR" != /* ]]; then
 fi
 INSTALL_DIR="$(realpath -m "$INSTALL_DIR")"
 
-echo "Will uninstall Ollama Document Assistant"
+echo "Will uninstall Journaling Ollama Document Assistant"
 echo "- install dir: $INSTALL_DIR"
 echo "- unit file: $UNIT_PATH"
 if [[ "$REMOVE_MODELS" -eq 1 ]]; then
@@ -103,8 +103,8 @@ fi
 
 if cmd_exists systemctl; then
   echo "[1/5] Stopping and disabling user service"
-  systemctl --user stop ollama-document-assistant.service >/dev/null 2>&1 || true
-  systemctl --user disable ollama-document-assistant.service >/dev/null 2>&1 || true
+  systemctl --user stop journaling-ollama-document-assistant.service >/dev/null 2>&1 || true
+  systemctl --user disable journaling-ollama-document-assistant.service >/dev/null 2>&1 || true
 fi
 
 if [[ -f "$UNIT_PATH" ]]; then

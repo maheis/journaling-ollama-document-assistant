@@ -2427,7 +2427,7 @@ class Handler(BaseHTTPRequestHandler):
         log_file = self.store.paths.log_file
         dirs = {
             (log_file.parent / "logs").resolve(),
-            Path(os.path.expanduser("~/.local/share/ollama-document-assistant/logs")).resolve(),
+            Path(os.path.expanduser("~/.local/share/journaling-ollama-document-assistant/logs")).resolve(),
             (state_file.parent / "logs").resolve(),
             log_file.parent.resolve(),
         }
@@ -2553,7 +2553,7 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _restart_user_service(self) -> dict[str, Any]:
-        cmd = ["systemctl", "--user", "restart", "ollama-document-assistant.service"]
+        cmd = ["systemctl", "--user", "restart", "journaling-ollama-document-assistant.service"]
         try:
             proc = subprocess.run(
                 cmd,

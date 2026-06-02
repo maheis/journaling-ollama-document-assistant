@@ -13,7 +13,7 @@ if [[ -n "${BASH_SOURCE[0]-}" && -f "${BASH_SOURCE[0]}" ]]; then
 elif [[ -f "$0" ]]; then
   INSTALL_SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 fi
-DEFAULT_INSTALL_DIR="$HOME/.local/share/ollama-document-assistant"
+DEFAULT_INSTALL_DIR="$HOME/.local/share/journaling-ollama-document-assistant"
 PROJECT_DIR="$DEFAULT_INSTALL_DIR"
 VENV_DIR="$PROJECT_DIR/.venv"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -23,7 +23,7 @@ INSTALL_SYSTEM_DEPS=0
 INSTALL_OLLAMA=0
 PULL_MODELS=0
 MODEL_OVERRIDE=""
-REPO_URL="https://github.com/maheis/ollama-document-assistant.git"
+REPO_URL="https://github.com/maheis/journaling-ollama-document-assistant.git"
 REPO_REF=""
 
 print_usage() {
@@ -37,7 +37,7 @@ Options:
   --install-ollama     Install Ollama and try to start/enable service
   --pull-models        Pull model(s) in Ollama (default: qwen2.5:7b-instruct)
   --model <name>       Model name to pull (repeatable by comma: m1,m2)
-  --install-dir <dir>  Installation directory (default: ~/.local/share/ollama-document-assistant)
+  --install-dir <dir>  Installation directory (default: ~/.local/share/journaling-ollama-document-assistant)
   --repo-url <url>     Git repository URL for bootstrap checkout
   --repo-ref <ref>     Optional git branch/tag/commit to checkout
   --no-systemd         Do not install user systemd unit
@@ -48,7 +48,7 @@ Examples:
   bash ./install.sh
   bash ./install.sh --full-setup
   bash ./install.sh --install-system-deps --install-ollama --pull-models --model qwen2.5:7b-instruct
-  curl -fsSL https://raw.githubusercontent.com/maheis/ollama-document-assistant/main/install.sh | bash -s -- --full-setup
+  curl -fsSL https://raw.githubusercontent.com/maheis/journaling-ollama-document-assistant/main/install.sh | bash -s -- --full-setup
 USAGE
 }
 
@@ -151,8 +151,8 @@ sync_project_files() {
     fi
   done
 
-  if [[ -f "$SOURCE_DIR/systemd/ollama-document-assistant.service" ]]; then
-    cp "$SOURCE_DIR/systemd/ollama-document-assistant.service" "$PROJECT_DIR/systemd/ollama-document-assistant.service"
+  if [[ -f "$SOURCE_DIR/systemd/journaling-ollama-document-assistant.service" ]]; then
+    cp "$SOURCE_DIR/systemd/journaling-ollama-document-assistant.service" "$PROJECT_DIR/systemd/journaling-ollama-document-assistant.service"
   fi
 }
 
@@ -179,10 +179,10 @@ maybe_delete_bootstrap_installer() {
 }
 
 write_user_service_unit() {
-  local unit_path="$HOME/.config/systemd/user/ollama-document-assistant.service"
+  local unit_path="$HOME/.config/systemd/user/journaling-ollama-document-assistant.service"
   cat > "$unit_path" <<EOF
 [Unit]
-Description=Ollama Document Assistant (dry-run scanner + review web)
+Description=Journaling Ollama Document Assistant (dry-run scanner + review web)
 After=network-online.target
 Wants=network-online.target
 
@@ -545,10 +545,10 @@ if [[ "$INSTALL_SYSTEMD" -eq 1 ]]; then
   mkdir -p "$HOME/.config/systemd/user"
   write_user_service_unit
   systemctl --user daemon-reload
-  systemctl --user enable ollama-document-assistant.service
+  systemctl --user enable journaling-ollama-document-assistant.service
 
   if [[ "$START_SERVICE" -eq 1 ]]; then
-    systemctl --user restart ollama-document-assistant.service
+    systemctl --user restart journaling-ollama-document-assistant.service
   fi
 fi
 
