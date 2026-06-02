@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import json
 import smtplib
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Any
 
 
@@ -95,6 +97,29 @@ def _send_email(settings: EmailNotificationSettings, *, subject: str, body: str)
         return EmailNotificationResult(sent=False, reason=str(exc))
 
     return EmailNotificationResult(sent=True)
+
+
+def notification_debug_snapshot(config: dict[str, Any]) -> dict[str, Any]:
+    settings = load_email_notification_settings(config)
+    return {
+        "enabled": settings.enabled,
+        "recipient_configured": bool(settings.recipient.strip()),
+        "sender_configured": bool(settings.sender.strip()),
+        "smtp_host_configured": bool(settings.smtp_host.strip()),
+        "smtp_port": settings.smtp_port,
+        "smtp_username_configured": bool(settings.smtp_username.strip()),
+        "smtp_password_configured": bool(settings.smtp_password),
+        "smtp_starttls": settings.smtp_starttls,
+        "smtp_ssl": settings.smtp_ssl,
+        "subject_prefix": settings.subject_prefix,
+    }
+
+
+def append_notification_debug_log(log_path: Path, payload: dict[str, Any]) -> None:
+    record = {"timestamp": datetime.now().isoformat(timespec="seconds"), **payload}
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
 
 
 def send_test_email(config: dict[str, Any], *, review_url: str, input_path: str) -> EmailNotificationResult:

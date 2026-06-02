@@ -39,7 +39,7 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 from assistant_config import get_section, load_config, pick, validate_config
-from notification_email import send_review_notification, send_test_email
+from notification_email import append_notification_debug_log, notification_debug_snapshot, send_review_notification, send_test_email
 
 try:
     from pypdf import PdfReader, PdfWriter
@@ -2699,15 +2699,35 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         return payload if isinstance(payload, dict) else {}
 
+    def _notification_debug_log_path(self, project_dir: Path) -> Path:
+        return (project_dir / "logs" / "notification_debug.jsonl").resolve()
+
     def _send_scan_completion_notification(self, config: dict[str, Any], project_dir: Path, scan_source: str, run_started_at: float) -> None:
         summary = self._read_last_organize_summary(project_dir)
         finished_at_raw = str(summary.get("finished_at", "")).strip()
+        debug_payload = {
+            "source": "web",
+            "scan_source": scan_source,
+            "run_started_at": datetime.fromtimestamp(run_started_at).isoformat(timespec="seconds"),
+            "summary_finished_at": finished_at_raw,
+            "notification": notification_debug_snapshot(config),
+        }
         if finished_at_raw:
             try:
                 summary_finished_at = datetime.fromisoformat(finished_at_raw).timestamp()
             except ValueError:
                 summary_finished_at = 0.0
             if summary_finished_at + 1 < run_started_at:
+                append_notification_debug_log(
+                    self._notification_debug_log_path(project_dir),
+                    {
+                        **debug_payload,
+                        "summary_stale": True,
+                        "decision": "skipped_stale_summary",
+                        "sent": False,
+                        "reason": "stale_summary",
+                    },
+                )
                 print("[WARN] Review notification skipped because organize summary is stale", flush=True)
                 return
         stats = summary.get("stats", {}) if isinstance(summary.get("stats", {}), dict) else {}
@@ -2720,6 +2740,18 @@ class Handler(BaseHTTPRequestHandler):
             scan_source=scan_source,
             review_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
             input_path=str(get_section(config, "service").get("input", "") or ""),
+        )
+        append_notification_debug_log(
+            self._notification_debug_log_path(project_dir),
+            {
+                **debug_payload,
+                "summary_stale": False,
+                "new_review_count": new_review_count,
+                "error_count": error_count,
+                "decision": "attempted_send" if (new_review_count > 0 or error_count > 0) else "skipped_no_review_or_errors",
+                "sent": result.sent,
+                "reason": result.reason,
+            },
         )
         if result.sent:
             print(f"[INFO] Review notification email sent for review={new_review_count}, errors={error_count}", flush=True)

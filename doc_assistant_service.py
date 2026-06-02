@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from assistant_config import get_section, load_config, pick, validate_config
-from notification_email import send_review_notification
+from notification_email import append_notification_debug_log, notification_debug_snapshot, send_review_notification
 
 
 def ts() -> str:
@@ -176,6 +176,10 @@ def read_last_summary(project_dir: Path) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+def notification_debug_log_path(project_dir: Path) -> Path:
+    return (project_dir / "logs" / "notification_debug.jsonl").resolve()
+
+
 def build_review_cmd(args: argparse.Namespace, project_dir: Path) -> list[str]:
     cmd = [
         args.python,
@@ -241,6 +245,18 @@ def run_organize_once(args: argparse.Namespace, project_dir: Path) -> int:
         stats = summary.get("stats", {}) if isinstance(summary.get("stats", {}), dict) else {}
         new_review_count = int(stats.get("review", 0) or 0)
         error_count = int(stats.get("errors", 0) or 0)
+        is_stale = summary_finished_at + 1 < started_at
+        debug_payload = {
+            "source": "service",
+            "scan_source": f"service:{args.schedule_mode}",
+            "exit_code": proc.returncode,
+            "run_started_at": datetime.fromtimestamp(started_at).isoformat(timespec="seconds"),
+            "summary_finished_at": finished_at_raw,
+            "summary_stale": is_stale,
+            "new_review_count": new_review_count,
+            "error_count": error_count,
+            "notification": notification_debug_snapshot(config),
+        }
         if summary_finished_at + 1 >= started_at and (new_review_count > 0 or error_count > 0):
             review_url = f"http://{args.host}:{args.port}"
             result = send_review_notification(
@@ -251,13 +267,54 @@ def run_organize_once(args: argparse.Namespace, project_dir: Path) -> int:
                 review_url=review_url,
                 input_path=args.input,
             )
+            append_notification_debug_log(
+                notification_debug_log_path(project_dir),
+                {
+                    **debug_payload,
+                    "decision": "attempted_send",
+                    "sent": result.sent,
+                    "reason": result.reason,
+                },
+            )
             if result.sent:
                 emit(f"Review notification email sent for review={new_review_count}, errors={error_count}")
             elif result.reason not in {"disabled", "no_new_review_entries_or_errors"}:
                 emit(f"[WARN] Review notification email not sent: {result.reason}")
         elif new_review_count > 0 or error_count > 0:
+            append_notification_debug_log(
+                notification_debug_log_path(project_dir),
+                {
+                    **debug_payload,
+                    "decision": "skipped_stale_summary",
+                    "sent": False,
+                    "reason": "stale_summary",
+                },
+            )
             emit("[WARN] Review notification skipped because organize summary is stale")
+        else:
+            append_notification_debug_log(
+                notification_debug_log_path(project_dir),
+                {
+                    **debug_payload,
+                    "decision": "skipped_no_review_or_errors",
+                    "sent": False,
+                    "reason": "no_new_review_entries_or_errors",
+                },
+            )
     except Exception as exc:
+        try:
+            append_notification_debug_log(
+                notification_debug_log_path(project_dir),
+                {
+                    "source": "service",
+                    "scan_source": f"service:{args.schedule_mode}",
+                    "decision": "handler_exception",
+                    "sent": False,
+                    "reason": str(exc),
+                },
+            )
+        except Exception:
+            pass
         emit(f"[WARN] Review notification handling failed: {exc}")
     return proc.returncode
 

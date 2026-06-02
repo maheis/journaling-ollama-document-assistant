@@ -48,5 +48,5 @@
 [ ] dokumentation webproxy
 [ ] dokumentation prüfen und beschreibung erweitern!
 [ ] email-benachrichtigung bei neuen Dokumenten zur prüfung
-[ ] yoda = your ollama document assistant
-[ ] laufzeit ausgeben
+[ ] joda = your ollama document assistant
+[x] laufzeit ausgeben
