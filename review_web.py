@@ -1174,6 +1174,8 @@ function rowMarkup(row) {
             <div class="edit-fields-vertical">
                 <div class="edit-field">
                     <label>Sender
+                        <input list="sender-mem" name="sender" value="${esc(row.edited.sender || '')}" />
+                    </label>
                     <div class="mini">LLM: ${esc(row.default.sender || '')}</div>
                 </div>
                 <div class="edit-field">
