@@ -1905,6 +1905,7 @@ async function sendTestEmail() {
         status((payload.error || payload.message || 'Testmail fehlgeschlagen') + details, 'err');
         return;
     }
+    byId('notify-enabled').value = 'true';
     status(payload.message || 'Testmail gesendet.', 'ok');
 }
 
@@ -2696,23 +2697,34 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         return payload if isinstance(payload, dict) else {}
 
-    def _send_scan_completion_notification(self, config: dict[str, Any], project_dir: Path, scan_source: str) -> None:
+    def _send_scan_completion_notification(self, config: dict[str, Any], project_dir: Path, scan_source: str, run_started_at: float) -> None:
         summary = self._read_last_organize_summary(project_dir)
+        finished_at_raw = str(summary.get("finished_at", "")).strip()
+        if finished_at_raw:
+            try:
+                summary_finished_at = datetime.fromisoformat(finished_at_raw).timestamp()
+            except ValueError:
+                summary_finished_at = 0.0
+            if summary_finished_at + 1 < run_started_at:
+                print("[WARN] Review notification skipped because organize summary is stale", flush=True)
+                return
         stats = summary.get("stats", {}) if isinstance(summary.get("stats", {}), dict) else {}
         new_review_count = int(stats.get("review", 0) or 0)
+        error_count = int(stats.get("errors", 0) or 0)
         result = send_review_notification(
             config,
             new_review_count=new_review_count,
+            error_count=error_count,
             scan_source=scan_source,
             review_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
             input_path=str(get_section(config, "service").get("input", "") or ""),
         )
         if result.sent:
-            print(f"[INFO] Review notification email sent for {new_review_count} new entries", flush=True)
-        elif result.reason not in {"disabled", "no_new_review_entries"}:
+            print(f"[INFO] Review notification email sent for review={new_review_count}, errors={error_count}", flush=True)
+        elif result.reason not in {"disabled", "no_new_review_entries_or_errors"}:
             print(f"[WARN] Review notification email not sent: {result.reason}", flush=True)
 
-    def _watch_scan_process(self, proc: subprocess.Popen[bytes], config: dict[str, Any], project_dir: Path) -> None:
+    def _watch_scan_process(self, proc: subprocess.Popen[bytes], config: dict[str, Any], project_dir: Path, run_started_at: float) -> None:
         rc = proc.wait()
         finished_at = time.time()
         with self.scan_lock:
@@ -2727,11 +2739,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.scan_last_notified_key = notification_key
 
-        if rc == 0:
-            try:
-                self._send_scan_completion_notification(config, project_dir, "web:manual")
-            except Exception as exc:
-                print(f"[WARN] Manual scan notification handling failed: {exc}", flush=True)
+        try:
+            self._send_scan_completion_notification(config, project_dir, "web:manual", run_started_at)
+        except Exception as exc:
+            print(f"[WARN] Manual scan notification handling failed: {exc}", flush=True)
 
     def _resolve_scan_input_dir(self, config: dict[str, Any]) -> Path:
         service = get_section(config, "service")
@@ -3311,7 +3322,8 @@ class Handler(BaseHTTPRequestHandler):
             with self.scan_lock:
                 self.scan_proc = proc
 
-            watcher = threading.Thread(target=self._watch_scan_process, args=(proc, config, project_dir), daemon=True)
+            run_started_at = time.time()
+            watcher = threading.Thread(target=self._watch_scan_process, args=(proc, config, project_dir, run_started_at), daemon=True)
             watcher.start()
 
             self._json_response({"ok": True, "running": False, "pid": proc.pid})
@@ -3396,6 +3408,8 @@ class Handler(BaseHTTPRequestHandler):
             smtp_password = str(email_payload.get("smtp_password", ""))
             if not smtp_password:
                 smtp_password = str(existing_email.get("smtp_password", ""))
+            if not notify_enabled:
+                notify_enabled = True
             notifications["email"] = {
                 "enabled": notify_enabled,
                 "to": str(email_payload.get("to", "")).strip(),
@@ -3425,7 +3439,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"ok": False, "error": "Testmail konnte nicht gesendet werden", "reason": result.reason}, status=400)
                 return
 
-            self._json_response({"ok": True, "message": "Testmail gesendet. E-Mail-Einstellungen gespeichert."})
+            self._json_response({"ok": True, "message": "Testmail gesendet. Automatische E-Mail-Benachrichtigung wurde aktiviert und gespeichert."})
             return
 
         if parsed.path == "/api/config":

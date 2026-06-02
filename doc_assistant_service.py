@@ -222,6 +222,7 @@ def build_organize_cmd(args: argparse.Namespace, project_dir: Path) -> list[str]
 
 def run_organize_once(args: argparse.Namespace, project_dir: Path) -> int:
     cmd = build_organize_cmd(args, project_dir)
+    started_at = time.time()
     emit("Run dry-run scan: " + " ".join(shlex.quote(part) for part in cmd))
     proc = subprocess.run(cmd, cwd=str(project_dir), check=False)
     emit(f"Dry-run finished with exit code {proc.returncode}")
@@ -229,21 +230,33 @@ def run_organize_once(args: argparse.Namespace, project_dir: Path) -> int:
         cfg = load_config(args.config_file, project_dir)
         config = cfg.data if isinstance(cfg.data, dict) else {}
         summary = read_last_summary(project_dir)
+        finished_at_raw = str(summary.get("finished_at", "")).strip()
+        if finished_at_raw:
+            try:
+                summary_finished_at = datetime.fromisoformat(finished_at_raw).timestamp()
+            except ValueError:
+                summary_finished_at = 0.0
+        else:
+            summary_finished_at = 0.0
         stats = summary.get("stats", {}) if isinstance(summary.get("stats", {}), dict) else {}
         new_review_count = int(stats.get("review", 0) or 0)
-        if proc.returncode == 0 and new_review_count > 0:
+        error_count = int(stats.get("errors", 0) or 0)
+        if summary_finished_at + 1 >= started_at and (new_review_count > 0 or error_count > 0):
             review_url = f"http://{args.host}:{args.port}"
             result = send_review_notification(
                 config,
                 new_review_count=new_review_count,
+                error_count=error_count,
                 scan_source=f"service:{args.schedule_mode}",
                 review_url=review_url,
                 input_path=args.input,
             )
             if result.sent:
-                emit(f"Review notification email sent for {new_review_count} new entries")
-            elif result.reason not in {"disabled", "no_new_review_entries"}:
+                emit(f"Review notification email sent for review={new_review_count}, errors={error_count}")
+            elif result.reason not in {"disabled", "no_new_review_entries_or_errors"}:
                 emit(f"[WARN] Review notification email not sent: {result.reason}")
+        elif new_review_count > 0 or error_count > 0:
+            emit("[WARN] Review notification skipped because organize summary is stale")
     except Exception as exc:
         emit(f"[WARN] Review notification handling failed: {exc}")
     return proc.returncode

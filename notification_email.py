@@ -120,28 +120,56 @@ def send_review_notification(
     config: dict[str, Any],
     *,
     new_review_count: int,
+    error_count: int,
     scan_source: str,
     review_url: str,
     input_path: str,
 ) -> EmailNotificationResult:
-    if new_review_count <= 0:
-        return EmailNotificationResult(sent=False, reason="no_new_review_entries")
+    if new_review_count <= 0 and error_count <= 0:
+        return EmailNotificationResult(sent=False, reason="no_new_review_entries_or_errors")
 
     settings = load_email_notification_settings(config)
     if not settings.enabled:
         return EmailNotificationResult(sent=False, reason="disabled")
 
-    subject = f"{settings.subject_prefix} {new_review_count} neue Dokumente zur Prüfung"
-    body = "\n".join(
-        [
+    if error_count > 0 and new_review_count > 0:
+        subject = f"{settings.subject_prefix} {new_review_count} neue Prüfdokumente, {error_count} Fehler"
+        body_lines = [
+            "Ein Scan wurde mit Fehlern abgeschlossen.",
+            "",
+            f"Neue Dokumente zur Prüfung: {new_review_count}",
+            f"Fehler: {error_count}",
+            f"Scan-Quelle: {scan_source}",
+            f"Inbox: {input_path}",
+            f"Weboberfläche: {review_url}",
+            "",
+            "Bitte die neuen Vorschläge prüfen und die Fehlerursache kontrollieren.",
+        ]
+    elif error_count > 0:
+        subject = f"{settings.subject_prefix} Scan mit {error_count} Fehlern"
+        body_lines = [
+            "Ein Scan wurde mit Fehlern abgeschlossen.",
+            "",
+            f"Neue Dokumente zur Prüfung: {new_review_count}",
+            f"Fehler: {error_count}",
+            f"Scan-Quelle: {scan_source}",
+            f"Inbox: {input_path}",
+            f"Weboberfläche: {review_url}",
+            "",
+            "Bitte die Fehlerursache prüfen.",
+        ]
+    else:
+        subject = f"{settings.subject_prefix} {new_review_count} neue Dokumente zur Prüfung"
+        body_lines = [
             "Ein Scan wurde abgeschlossen.",
             "",
             f"Neue Dokumente zur Prüfung: {new_review_count}",
+            f"Fehler: {error_count}",
             f"Scan-Quelle: {scan_source}",
             f"Inbox: {input_path}",
             f"Weboberfläche: {review_url}",
             "",
             "Bitte die neuen Vorschläge in der Weboberfläche prüfen.",
         ]
-    )
+    body = "\n".join(body_lines)
     return _send_email(settings, subject=subject, body=body)
