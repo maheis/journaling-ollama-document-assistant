@@ -1052,6 +1052,7 @@ HTML_PAGE = """<!doctype html>
                 <button class="primary" onclick="deployAll()">Ausführung starten</button>
                 <button id="trigger-scan-btn" onclick="triggerScan()">Scan starten</button>
                 <button id="stop-scan-btn" onclick="stopScan()" disabled>Scan stoppen</button>
+                <button onclick="window.location.href='/prompt'">Prompt</button>
                 <button onclick="window.location.href='/config'">Konfiguration</button>
                 <button onclick="window.location.href='/logs'">Logfiles</button>
                 <label class="filter-box">
@@ -2373,6 +2374,7 @@ LOGIN_PAGE = """<!doctype html>
         <p>Bitte Passwort eingeben.</p>
         <input id=\"pw\" type=\"password\" autocomplete=\"current-password\" placeholder=\"Passwort\" required />
         <button type=\"submit\">Anmelden</button>
+        <button type=\"button\" onclick=\"window.location.href='/prompt'\" style=\"margin-top:8px;background:#2b3449;border:1px solid #3a445f;color:var(--ink);\">Prompt (ohne Login)</button>
         <div class=\"err\" id=\"err\"></div>
     </form>
 
@@ -3200,8 +3202,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/prompt":
-            if not self._require_auth(is_api=False):
-                return
+            # Allow prompt page without authentication (public entrypoint)
             self._text_response(PROMPT_PAGE)
             return
 
