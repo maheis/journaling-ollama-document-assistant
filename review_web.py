@@ -65,6 +65,7 @@ DEFAULT_CATEGORIES = [
     "AUTO",
     "URLAUB",
     "HAUSNEBENKOSTEN",
+    "HAUS",
     "SONSTIGES",
 ]
 
