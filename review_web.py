@@ -56,6 +56,7 @@ DEFAULT_CATEGORIES = [
     "BANK",
     "STEUER",
     "GESUNDHEIT",
+    "ARZT",
     "KINDERGARTEN",
     "SCHULE",
     "ELTERNGELD",

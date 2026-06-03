@@ -49,6 +49,14 @@
         "krankenkasse",
         "behandlung"
     ],
+    "ARZT": [
+        "arzt",
+        "praxis",
+        "facharzt",
+        "hausarzt",
+        "ueberweisung",
+        "sprechstunde"
+    ],
     "KINDERGARTEN": [
         "kindergarten",
         "kita",
