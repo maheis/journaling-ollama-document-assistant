@@ -60,6 +60,8 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         _validate_str(errors, review_web, "field_aliases_file", scope="review_web")
         _validate_str(errors, review_web, "auth_password", scope="review_web")
         _validate_str(errors, review_web, "auth_password_file", scope="review_web")
+        _validate_enum(errors, review_web, "delete_mode", {"review-only", "delete", "move"}, scope="review_web")
+        _validate_str(errors, review_web, "delete_target_dir", scope="review_web")
         _validate_str_list(errors, review_web, "categories", scope="review_web")
 
     service = config.get("service", {})

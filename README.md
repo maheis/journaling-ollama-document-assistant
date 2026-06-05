@@ -295,6 +295,7 @@ Pfade konfigurieren:
 Hinweis zur Web-Konfigurationsseite:
 
 - speichert in `assistant_config.json` (service.input/output/model/schedule_mode/interval_minutes/daily_time/inbox_poll_seconds)
+- speichert dort auch das Löschverhalten aus der Review-UI (`review_web.delete_mode`, `review_web.delete_target_dir`)
 - Web-Passwort kann dort ebenfalls geändert werden (wird in die Passwortdatei geschrieben)
 - SMTP-Daten und Empfänger für Prüfungs-Benachrichtigungen können dort ebenfalls gepflegt werden
 - Logfiles können dort komplett zurückgesetzt werden

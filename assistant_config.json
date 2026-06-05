@@ -5,6 +5,8 @@
         "log_file": "logs/organize_log.jsonl",
         "state_file": "review_state.json",
         "field_aliases_file": "field_aliases.json",
+        "delete_mode": "move",
+        "delete_target_dir": ".deleted",
         "auth_password_file": ".review_web_password",
         "session_ttl_seconds": 28800
     },

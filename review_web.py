@@ -331,6 +331,20 @@ class Paths:
     aliases_file: Path
 
 
+def unique_destination_path(target: Path) -> Path:
+    if not target.exists():
+        return target
+
+    stem = target.stem
+    suffix = target.suffix
+    counter = 1
+    while True:
+        candidate = target.with_name(f"{stem}_{counter}{suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
 class PasswordAuth:
     def __init__(self, password: str, session_ttl_seconds: int) -> None:
         self.password_record = normalize_password_record(password)
@@ -1231,7 +1245,8 @@ async function deleteRow(id) {
         status(payload.error || 'Löschen fehlgeschlagen', 'err');
         return;
     }
-    status('Eintrag gelöscht.', 'ok');
+    const fileAction = payload.file_action?.message ? ` ${payload.file_action.message}.` : '';
+    status(`Eintrag gelöscht.${fileAction}`, 'ok');
     await reloadData();
 }
 window.deleteRow = deleteRow;
@@ -1562,6 +1577,25 @@ CONFIG_PAGE = """<!doctype html>
             <p class=\"meta\" id=\"meta\"></p>
 
             <div class=\"section\">
+                <h2>Löschen</h2>
+                <div class="grid stack">
+                    <div class="field">
+                        <label for="delete-mode">Dateiaktion beim Löschen (review_web.delete_mode)</label>
+                        <select id="delete-mode">
+                            <option value="move">In Ablageordner verschieben</option>
+                            <option value="delete">Physikalisch löschen</option>
+                            <option value="review-only">Nur Review-Eintrag löschen</option>
+                        </select>
+                    </div>
+
+                    <div class="field wide">
+                        <label for="delete-target-dir">Ablageordner für gelöschte Dateien (review_web.delete_target_dir)</label>
+                        <input id="delete-target-dir" placeholder=".deleted" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
                 <h2>In-/Outbox</h2>
                 <div class=\"grid\">
                     <div class=\"field wide\">
@@ -1927,6 +1961,7 @@ async function loadConfig() {
 
     const service = payload.service || {};
     const organize = service.organize_options || {};
+    const review = payload.review_web || {};
     const notifications = payload.notifications || {};
     const email = notifications.email || {};
     byId('input').value = service.input || '';
@@ -1943,6 +1978,8 @@ async function loadConfig() {
     byId('max-cpu-threads').value = organize.max_cpu_threads ?? 4;
     byId('ollama-num-thread').value = organize.ollama_num_thread ?? 4;
     byId('sleep-between-files').value = organize.sleep_between_files ?? 0.4;
+    byId('delete-mode').value = review.delete_mode || 'move';
+    byId('delete-target-dir').value = review.delete_target_dir || '.deleted';
     byId('new-password').value = '';
     byId('new-password-confirm').value = '';
     byId('notify-enabled').value = String(!!email.enabled);
@@ -1973,6 +2010,10 @@ async function saveConfig() {
             interval_minutes: byId('interval').value,
             daily_time: byId('daily-time').value,
             inbox_poll_seconds: byId('inbox-poll').value
+        },
+        review_web: {
+            delete_mode: byId('delete-mode').value,
+            delete_target_dir: byId('delete-target-dir').value
         },
         organize_options: {
             ollama_timeout: byId('ollama-timeout').value,
@@ -2624,6 +2665,52 @@ class Handler(BaseHTTPRequestHandler):
             project_dir = self.config_path.parent / project_dir
         return project_dir.resolve()
 
+    def _delete_policy_from_config(self, config: dict[str, Any]) -> tuple[str, Optional[Path]]:
+        review = get_section(config, "review_web")
+        mode = str(review.get("delete_mode", "move")).strip().lower() or "move"
+        if mode not in {"review-only", "delete", "move"}:
+            mode = "move"
+
+        target_dir_raw = str(review.get("delete_target_dir", "")).strip() or ".deleted"
+        if mode != "move":
+            return mode, None
+
+        target_dir = Path(target_dir_raw).expanduser()
+        if not target_dir.is_absolute():
+            target_dir = self.config_path.parent / target_dir
+        return mode, target_dir.resolve()
+
+    def _delete_file_for_entry(self, path: Optional[Path]) -> dict[str, str]:
+        if path is None:
+            return {"mode": "missing", "message": "Datei nicht mehr vorhanden"}
+
+        config, load_errors = self._load_runtime_config()
+        if load_errors:
+            raise RuntimeError("Konfiguration konnte nicht geladen werden")
+
+        mode, target_dir = self._delete_policy_from_config(config)
+        if mode == "review-only":
+            return {"mode": mode, "message": "Datei unverändert belassen"}
+
+        if mode == "delete":
+            try:
+                path.unlink(missing_ok=True)
+            except Exception as exc:
+                raise RuntimeError(f"Datei konnte nicht gelöscht werden: {exc}") from exc
+            return {"mode": mode, "message": "Datei physikalisch gelöscht"}
+
+        if target_dir is None:
+            raise RuntimeError("Kein Zielordner für Lösch-Ablage konfiguriert")
+
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            destination = unique_destination_path(target_dir / path.name)
+            shutil.move(str(path), str(destination))
+        except Exception as exc:
+            raise RuntimeError(f"Datei konnte nicht verschoben werden: {exc}") from exc
+
+        return {"mode": mode, "message": f"Datei verschoben nach {destination}"}
+
     def _run_git(self, project_dir: Path, args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["git", "-C", str(project_dir)] + args,
@@ -3243,6 +3330,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"error": "config_load_failed", "errors": errors}, status=500)
                 return
             service = get_section(config, "service")
+            review = get_section(config, "review_web")
             notifications = get_section(config, "notifications")
             email = get_section(notifications, "email")
             organize_extra_args = [str(v) for v in service.get("organize_extra_args", [])] if isinstance(service.get("organize_extra_args", []), list) else []
@@ -3260,6 +3348,10 @@ class Handler(BaseHTTPRequestHandler):
                         "daily_time": str(service.get("daily_time", "02:00")).strip() or "02:00",
                         "inbox_poll_seconds": int(service.get("inbox_poll_seconds", 2) or 2),
                         "organize_options": organize_options,
+                    },
+                    "review_web": {
+                        "delete_mode": self._delete_policy_from_config(config)[0],
+                        "delete_target_dir": str(review.get("delete_target_dir", "")).strip() or ".deleted",
                     },
                     "notifications": {
                         "email": {
@@ -3397,12 +3489,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"ok": False, "error": "Kein Eintrag angegeben"}, status=400)
                 return
             try:
+                file_action = self._delete_file_for_entry(self.store.file_path_for_id(entry_id))
                 ok = self.store.delete_entry_everywhere(entry_id)
             except Exception as exc:
                 self._json_response({"ok": False, "error": f"Loeschen fehlgeschlagen: {exc}"}, status=500)
                 return
             if ok:
-                self._json_response({"ok": True})
+                self._json_response({"ok": True, "file_action": file_action})
             else:
                 self._json_response({"ok": False, "error": "Eintrag nicht gefunden"}, status=404)
             return
@@ -3634,6 +3727,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/config":
             service_payload = payload.get("service", {}) if isinstance(payload.get("service"), dict) else {}
+            review_payload = payload.get("review_web", {}) if isinstance(payload.get("review_web"), dict) else {}
             auth_payload = payload.get("auth", {}) if isinstance(payload.get("auth"), dict) else {}
             organize_payload = payload.get("organize_options", {}) if isinstance(payload.get("organize_options"), dict) else {}
             notifications_payload = payload.get("notifications", {}) if isinstance(payload.get("notifications"), dict) else {}
@@ -3641,6 +3735,8 @@ class Handler(BaseHTTPRequestHandler):
             input_path = str(service_payload.get("input", "")).strip()
             output_path = str(service_payload.get("output", "")).strip()
             model = str(service_payload.get("model", "")).strip()
+            delete_mode = str(review_payload.get("delete_mode", "move")).strip().lower() or "move"
+            delete_target_dir = str(review_payload.get("delete_target_dir", "")).strip() or ".deleted"
             schedule_mode = str(service_payload.get("schedule_mode", "interval")).strip().lower() or "interval"
             interval_raw = str(service_payload.get("interval_minutes", "")).strip()
             daily_time = str(service_payload.get("daily_time", "02:00")).strip() or "02:00"
@@ -3674,6 +3770,10 @@ class Handler(BaseHTTPRequestHandler):
 
             if schedule_mode not in {"interval", "inbox-trigger", "daily"}:
                 self._json_response({"error": "service.schedule_mode must be one of: interval, inbox-trigger, daily"}, status=400)
+                return
+
+            if delete_mode not in {"review-only", "delete", "move"}:
+                self._json_response({"error": "review_web.delete_mode must be one of: review-only, delete, move"}, status=400)
                 return
 
             try:
@@ -3755,6 +3855,8 @@ class Handler(BaseHTTPRequestHandler):
             review = config.get("review_web")
             if not isinstance(review, dict):
                 review = {}
+            review["delete_mode"] = delete_mode
+            review["delete_target_dir"] = delete_target_dir
 
             import os
             auth_password_file = self._resolve_auth_password_file(config)

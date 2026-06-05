@@ -51,3 +51,4 @@
 [x] joda = journaling ollama document assistant
 [x] laufzeit ausgeben
 [ ] webui für normale ki anfragen
+[ ] löschen von dateien über die weboberfläche
