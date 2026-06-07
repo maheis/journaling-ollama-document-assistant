@@ -820,6 +820,32 @@ class ReviewStore:
             self._save_state()
             return {"updated": updated}
 
+    def mark_file_changed(self, item_id: str) -> dict[str, Any]:
+        """Re-evaluate an entry when the underlying file was changed/saved externally.
+
+        Sets status to 'saved' if the file exists and edited values differ from defaults,
+        otherwise to 'pending'. If the file no longer exists, sets 'missing'.
+        Returns a small payload with the new status or an error.
+        """
+        with self.lock:
+            entry = self.state["entries"].get(item_id)
+            if not entry:
+                return {"ok": False, "error": "entry_not_found"}
+
+            try:
+                src = Path(entry.get("source", ""))
+                exists = src.exists()
+            except Exception:
+                exists = False
+
+            if not exists:
+                entry["status"] = "missing"
+            else:
+                entry["status"] = "saved" if self._edited_differs_from_default(entry) else "pending"
+
+            self._save_state()
+            return {"ok": True, "status": entry.get("status", "")}
+
     def _learn_aliases(self, entry: dict[str, Any]) -> int:
         count = 0
         default = entry.get("default", {})
@@ -3600,6 +3626,20 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/deploy":
             rows = payload.get("rows", []) if isinstance(payload.get("rows"), list) else []
             self._json_response(self.store.deploy(rows))
+            return
+
+        if parsed.path == "/api/file-changed":
+            # Notify the server that a file was edited and saved externally.
+            item_id = str(payload.get("id", "")).strip()
+            if not item_id:
+                self._json_response({"ok": False, "error": "no_id_provided"}, status=400)
+                return
+            try:
+                result = self.store.mark_file_changed(item_id)
+            except Exception as exc:
+                self._json_response({"ok": False, "error": str(exc)}, status=500)
+                return
+            self._json_response(result)
             return
 
         if parsed.path == "/api/prompt":
