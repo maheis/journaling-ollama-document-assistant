@@ -54,6 +54,6 @@
 [x] löschen von dateien über die weboberfläche
 [x] mail wenn neue dokumente ins review kommen
 [x] mobile ansicht
-[ ] textfilter
+[x] textfilter
 [ ] ausgeführt soll datei im zielpfad nachträglich ändern können und nicht auf "inbox" triggern (datei fehlt)
 [x] ausgeführt datum merken
