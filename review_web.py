@@ -1063,8 +1063,10 @@ HTML_PAGE = """<!doctype html>
             td { display: block; width: 100%; padding: 6px 0; border-bottom: none; }
             td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
             td.col-file a.filelink { font-weight: 600; color: #67c7ff; }
-            .row-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
-            input, select { width: 100%; }
+            .row-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; }
+            .row-actions button { flex: 0 0 auto; white-space: nowrap; }
+            .actions { flex-wrap: nowrap; overflow-x: auto; }
+            input, select { width: 100%; min-width: 220px; }
         }
     </style>
 </head>
