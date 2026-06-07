@@ -735,7 +735,26 @@ class ReviewStore:
                 rows.append(row)
 
             status_order = {"pending": 0, "saved": 1, "missing": 2, "deployed": 3}
-            rows.sort(key=lambda r: (status_order.get(r.get("status", "pending"), 9), r["source_name"].lower()))
+
+            def _sort_key(r: dict[str, Any]):
+                status = r.get("status", "pending")
+                primary = status_order.get(status, 9)
+                # For deployed entries, sort by deployed_at (newest first)
+                if status == "deployed":
+                    da = str(r.get("deployed_at", "") or "").strip()
+                    if da:
+                        try:
+                            ts = datetime.fromisoformat(da).timestamp()
+                        except Exception:
+                            ts = 0.0
+                    else:
+                        ts = 0.0
+                    # deployed_flag ensures deployed entries are grouped appropriately
+                    return (primary, 0, -ts)
+                # Non-deployed: keep previous secondary sort by source name
+                return (primary, 1, r["source_name"].lower())
+
+            rows.sort(key=_sort_key)
             counts = {"pending": 0, "saved": 0, "missing": 0, "deployed": 0}
             for row in rows:
                 key = row.get("status", "pending")
