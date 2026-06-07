@@ -55,5 +55,5 @@
 [x] mail wenn neue dokumente ins review kommen
 [x] mobile ansicht
 [x] textfilter
-[ ] ausgeführt soll datei im zielpfad nachträglich ändern können und nicht auf "inbox" triggern (datei fehlt)
+[x] ausgeführt soll datei im zielpfad nachträglich ändern können und nicht auf "inbox" triggern (datei fehlt)
 [x] ausgeführt datum merken
