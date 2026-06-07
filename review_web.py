@@ -790,10 +790,6 @@ class ReviewStore:
                     continue
                 entry = entries[item_id]
                 incoming = row.get("edited", {}) if isinstance(row.get("edited", {}), dict) else {}
-                incoming_deployed_target = str(row.get("deployed_target", "") or "").strip()
-                # Allow updating deployed entries only if a deployed_target is provided
-                if entry.get("status") == "deployed" and not incoming_deployed_target:
-                    continue
 
                 edited = entry.get("edited", {}).copy()
 
@@ -807,18 +803,10 @@ class ReviewStore:
 
                 entry["edited"] = edited
                 self._remember_values(edited)
-                # If a deployed_target was provided, update it and set status accordingly
-                if incoming_deployed_target:
-                    entry["deployed_target"] = incoming_deployed_target
+                # Preserve 'deployed' status for already deployed entries (unless file missing)
+                if entry.get("status") == "deployed":
                     try:
-                        p = Path(incoming_deployed_target)
-                        if p.exists():
-                            entry["status"] = "deployed"
-                            # update source to point to deployed file so future checks use the correct path
-                            entry["source"] = str(p)
-                            if not entry.get("deployed_at"):
-                                entry["deployed_at"] = datetime.now().isoformat(timespec="seconds")
-                        else:
+                        if not Path(entry.get("source", "")).exists():
                             entry["status"] = "missing"
                     except Exception:
                         entry["status"] = "missing"
@@ -862,8 +850,7 @@ class ReviewStore:
                 if item_id not in entries:
                     continue
                 entry = entries[item_id]
-                if entry.get("status") == "deployed":
-                    continue
+                # allow redeploying even if already deployed
 
                 incoming = row.get("edited", {}) if isinstance(row.get("edited", {}), dict) else {}
                 for field in ("sender", "category", "customer_number", "title", "date"):
@@ -1244,7 +1231,7 @@ function rowMarkup(row) {
     const missing = row.source_exists ? '' : '<div><span class="pill missing">DATEI FEHLT</span></div>';
     const statusClass = `status-${String(row.status || 'pending')}`;
     const statusLabel = uiStatusLabel(row.status);
-    const deployDisabled = row.status === 'deployed' ? 'disabled' : '';
+    const deployDisabled = '';
 
     return `<tr data-id="${esc(row.id)}">
         <td class="col-file" data-label="Datei">
@@ -1288,7 +1275,7 @@ function rowMarkup(row) {
             <input name="date" value="${esc(row.edited.date || '')}" placeholder="YYYY-MM-DD" />
             <div class="mini">LLM: ${esc(row.default.date || '')}</div>
         </td>
-        <td class="mini" data-label="Ziel">${row.status === 'deployed' ? (`<input name="deployed_target" value="${esc(row.deployed_target || row.target_preview || '')}" />`): esc(row.target_preview || '')}</td>
+        <td class="mini" data-label="Ziel">${esc(row.target_preview || row.deployed_target || '')}</td>
         <td data-label="Aktionen">
             <div class="row-actions">
                 <button onclick="saveRow('${esc(row.id)}')" ${deployDisabled}>Speichern</button>
@@ -1329,7 +1316,6 @@ function rowPayload(tr) {
             title: tr.querySelector('[name="title"]').value,
             date: tr.querySelector('[name="date"]').value,
         },
-        deployed_target: (tr.querySelector('[name="deployed_target"]') || { value: '' }).value,
     };
 }
 
