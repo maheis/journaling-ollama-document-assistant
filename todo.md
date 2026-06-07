@@ -53,4 +53,7 @@
 [x] webui für normale ki anfragen
 [x] löschen von dateien über die weboberfläche
 [x] mail wenn neue dokumente ins review kommen
-[ ] mobile ansicht
+[x] mobile ansicht
+[ ] textfilter
+[ ] ausgeführt soll datei im zielpfad nachträglich ändern können und nicht auf "inbox" triggern (datei fehlt)
+[ ] ausgeführt datum merken

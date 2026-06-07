@@ -728,6 +728,7 @@ class ReviewStore:
                     "confidence": float(entry.get("confidence", 0.0) or 0.0),
                     "review": bool(entry.get("review", False)),
                     "target_preview": target_preview,
+                    "deployed_at": entry.get("deployed_at", ""),
                     "default": entry.get("default", {}),
                     "edited": entry.get("edited", {}),
                 }
@@ -1198,6 +1199,7 @@ function rowMarkup(row) {
             <div class="mini">${esc(row.source_preview || row.source)}</div>
             <div>${badge}</div>
             ${missing}
+            ${row.deployed_at ? ('<div class="mini">Ausgeführt: ' + esc(row.deployed_at) + '</div>') : ''}
         </td>
         <td data-label="Status"><span class="pill ${statusClass}">${esc(statusLabel)}</span></td>
         <td data-label="Vertr.">${Number(row.confidence || 0).toFixed(2)}</td>
