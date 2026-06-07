@@ -1066,7 +1066,7 @@ HTML_PAGE = """<!doctype html>
             .row-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; }
             .row-actions button { flex: 0 0 auto; white-space: nowrap; }
             .actions { flex-wrap: nowrap; overflow-x: auto; }
-            input, select { width: 100%; min-width: 220px; }
+            input, select { width: 100%; min-width: 300px; }
         }
     </style>
 </head>
