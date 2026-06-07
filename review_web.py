@@ -950,7 +950,7 @@ HTML_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda</title>
-    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="icon" type="image/icon" href="/assets/favicon.ico" />
     <meta name="theme-color" content="#1c2233" />
     <style>
         :root {
@@ -1582,7 +1582,7 @@ CONFIG_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda - Konfiguration</title>
-    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="icon" type="image/icon" href="/assets/favicon.ico" />
     <meta name="theme-color" content="#1c2233" />
     <style>
         :root {
@@ -2160,7 +2160,7 @@ PROMPT_PAGE = """<!doctype html>
         <meta charset=\"utf-8\" />
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
         <title>joda - Prompt</title>
-        <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="icon" type="image/icon" href="/assets/favicon.ico" />
         <meta name="theme-color" content="#1c2233" />
         <style>
                 body { font-family: Arial, sans-serif; background: #0f1117; color: #e8edf7; padding: 20px; }
@@ -2239,7 +2239,7 @@ LOGS_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda - Logfiles</title>
-    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="icon" type="image/icon" href="/assets/favicon.ico" />
     <meta name="theme-color" content="#1c2233" />
     <style>
         :root {
@@ -2456,7 +2456,7 @@ LOGIN_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda - Login</title>
-    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="icon" type="image/icon" href="/assets/favicon.ico" />
     <meta name="theme-color" content="#1c2233" />
     <style>
         :root {

@@ -5,6 +5,9 @@
    id="svg1"
    sodipodi:docname="favicon.svg"
    inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   inkscape:export-filename="favicon.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -21,20 +24,30 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="8.9921876"
-     inkscape:cx="20.907037"
-     inkscape:cy="15.402259"
+     inkscape:cx="-32.361424"
+     inkscape:cy="23.909644"
      inkscape:window-width="3440"
      inkscape:window-height="1359"
      inkscape:window-x="0"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
-     inkscape:current-layer="svg1" />
-  <rect
-     width="100%"
-     height="100%"
-     fill="#1c2233"
-     id="rect1"
-     style="fill:#071a18;fill-opacity:1" />
+     inkscape:current-layer="layer1" />
+  <g
+     inkscape:groupmode="layer"
+     id="layer1"
+     inkscape:label="Shadow"
+     transform="matrix(1.3125,0,0,1.3125,-10,-13.558947)">
+    <path
+       id="path1"
+       style="fill:#071a18;fill-opacity:1;stroke:none;stroke-width:1.2878"
+       d="M 50.531488,39.62128 39.594651,27.874308 64,20.988151 Z m -37.062976,0 L 24.405349,27.874308 0,20.988151 Z" />
+    <path
+       id="path3"
+       style="fill:#071a18;fill-opacity:1;stroke-width:0.5575"
+       d="M -20.98815,32 A 17.146856,14.210898 0 0 1 -38.135006,46.210898 17.146856,14.210898 0 0 1 -55.281862,32 17.146856,14.210898 0 0 1 -38.135006,17.789102 17.146856,14.210898 0 0 1 -20.98815,32 Z M -41.070965,52.950541 A 14.210898,20.950541 0 0 1 -55.281863,32 14.210898,20.950541 0 0 1 -41.070965,11.049459 14.210898,20.950541 0 0 1 -26.860066,32 14.210898,20.950541 0 0 1 -41.070965,52.950541 Z"
+       inkscape:label="path1"
+       transform="rotate(-90)" />
+  </g>
   <path
      id="path2"
      style="fill:#23c4a8;fill-opacity:1;stroke:none;stroke-width:1.2878"
