@@ -1096,6 +1096,10 @@ HTML_PAGE = """<!doctype html>
                         <option value="deployed">Ausgeführt</option>
                     </select>
                 </label>
+                <label class="filter-box">
+                    Text-Filter
+                    <input id="text-filter" type="search" placeholder="Suche..." oninput="applyFilter()" />
+                </label>
             </div>
             <div class=\"status\" id=\"status\"></div>
         </div>
@@ -1121,6 +1125,7 @@ HTML_PAGE = """<!doctype html>
 <script>
 let DATA = { rows: [], categories: [], value_memory: {} };
 let CURRENT_FILTER = 'open';
+let CURRENT_TEXT_FILTER = '';
 let LAST_ACTIVITY_STATE = null;
 let META_BASE_TEXT = '';
 let LAST_PENDING_SCAN_COUNT = null;
@@ -1293,6 +1298,13 @@ function matchesFilter(row) {
     if (CURRENT_FILTER === 'all') {
         return true;
     }
+    // Text filter: check multiple searchable fields
+    if (CURRENT_TEXT_FILTER) {
+        const hay = (String(row.source_name || '') + ' ' + String(row.source || '') + ' ' + String(row.edited?.title || '') + ' ' + String(row.default?.title || '') + ' ' + String(row.edited?.sender || '') + ' ' + String(row.default?.sender || '') + ' ' + String(row.edited?.customer_number || '') + ' ' + String(row.target_preview || '')).toLowerCase();
+        if (!hay.includes(CURRENT_TEXT_FILTER)) {
+            return false;
+        }
+    }
     if (CURRENT_FILTER === 'open') {
         return status === 'pending' || status === 'saved' || status === 'missing';
     }
@@ -1308,6 +1320,8 @@ function renderRows() {
 function applyFilter() {
     const select = document.getElementById('status-filter');
     CURRENT_FILTER = (select?.value || 'all').toLowerCase();
+    const textInput = document.getElementById('text-filter');
+    CURRENT_TEXT_FILTER = (textInput?.value || '').trim().toLowerCase();
     const shownCount = renderRows();
     status(`Filter aktiv: ${CURRENT_FILTER}. Angezeigt: ${shownCount}.`);
 }

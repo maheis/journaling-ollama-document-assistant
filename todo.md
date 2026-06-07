@@ -56,4 +56,4 @@
 [x] mobile ansicht
 [ ] textfilter
 [ ] ausgeführt soll datei im zielpfad nachträglich ändern können und nicht auf "inbox" triggern (datei fehlt)
-[ ] ausgeführt datum merken
+[x] ausgeführt datum merken
