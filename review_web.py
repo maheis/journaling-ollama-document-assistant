@@ -1259,6 +1259,7 @@ function rowMarkup(row) {
     const missing = row.source_exists ? '' : '<div><span class="pill missing">DATEI FEHLT</span></div>';
     const statusClass = `status-${String(row.status || 'pending')}`;
     const statusLabel = uiStatusLabel(row.status);
+    const saveDisabled = (String(row.status || '').toLowerCase() === 'deployed' || row.deployed_at) ? 'disabled title="Bereits ausgeführt"' : '';
     const deployDisabled = '';
 
     return `<tr data-id="${esc(row.id)}">
@@ -1306,7 +1307,7 @@ function rowMarkup(row) {
         <td class="mini" data-label="Ziel">${esc(row.target_preview || row.deployed_target || '')}</td>
         <td data-label="Aktionen">
             <div class="row-actions">
-                <button onclick="saveRow('${esc(row.id)}')" ${deployDisabled}>Speichern</button>
+                <button onclick="saveRow('${esc(row.id)}')" ${saveDisabled}>Speichern</button>
                 <button class="primary" onclick="deployRow('${esc(row.id)}')" ${deployDisabled}>Ausführen</button>
                 <button class="danger" onclick="deleteRow('${esc(row.id)}')">Löschen</button>
             </div>
