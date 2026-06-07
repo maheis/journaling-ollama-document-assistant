@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 @dataclass
@@ -149,9 +149,26 @@ def send_review_notification(
     scan_source: str,
     review_url: str,
     input_path: str,
+    last_count_file: Optional[str] = None,
 ) -> EmailNotificationResult:
+    # Nothing to do if there are no new reviews and no errors
     if new_review_count <= 0 and error_count <= 0:
         return EmailNotificationResult(sent=False, reason="no_new_review_entries_or_errors")
+
+    # Determine previous known review count (if a persistence path was provided)
+    last_count = 0
+    if last_count_file:
+        try:
+            p = Path(last_count_file)
+            if p.exists() and p.is_file():
+                payload = json.loads(p.read_text(encoding="utf-8") or "{}")
+                last_count = int(payload.get("last_review_count", 0) or 0)
+        except Exception:
+            last_count = 0
+
+    # Only send when review count increased or there are errors
+    if error_count <= 0 and new_review_count <= last_count:
+        return EmailNotificationResult(sent=False, reason="no_increase")
 
     settings = load_email_notification_settings(config)
     if not settings.enabled:
@@ -197,4 +214,22 @@ def send_review_notification(
             "Bitte die neuen Vorschläge in der Weboberfläche prüfen.",
         ]
     body = "\n".join(body_lines)
-    return _send_email(settings, subject=subject, body=body)
+
+    result = _send_email(settings, subject=subject, body=body)
+
+    # Persist last known review count on successful send so we only notify on increases
+    if result.sent and last_count_file:
+        try:
+            p = Path(last_count_file)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            json.dump(
+                {"last_review_count": int(new_review_count or 0), "updated_at": datetime.now().isoformat()},
+                p.open("w", encoding="utf-8"),
+                ensure_ascii=False,
+                indent=2,
+            )
+        except Exception:
+            # Non-fatal: do not fail email if we cannot persist the file
+            pass
+
+    return result

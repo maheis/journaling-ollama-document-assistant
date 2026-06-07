@@ -245,6 +245,15 @@ def run_organize_once(args: argparse.Namespace, project_dir: Path) -> int:
         stats = summary.get("stats", {}) if isinstance(summary.get("stats", {}), dict) else {}
         new_review_count = int(stats.get("processed", 0) or 0)
         error_count = int(stats.get("errors", 0) or 0)
+        # read last known review count (optional persistence)
+        last_count_path = project_dir / "logs" / "last_review_count.json"
+        last_known_review_count = 0
+        try:
+            if last_count_path.exists() and last_count_path.is_file():
+                payload = json.loads(last_count_path.read_text(encoding="utf-8") or "{}")
+                last_known_review_count = int(payload.get("last_review_count", 0) or 0)
+        except Exception:
+            last_known_review_count = 0
         is_stale = summary_finished_at + 1 < started_at
         debug_payload = {
             "source": "service",
@@ -254,6 +263,7 @@ def run_organize_once(args: argparse.Namespace, project_dir: Path) -> int:
             "summary_finished_at": finished_at_raw,
             "summary_stale": is_stale,
             "new_review_count": new_review_count,
+            "last_known_review_count": last_known_review_count,
             "error_count": error_count,
             "notification": notification_debug_snapshot(config),
         }
@@ -266,6 +276,7 @@ def run_organize_once(args: argparse.Namespace, project_dir: Path) -> int:
                 scan_source=f"service:{args.schedule_mode}",
                 review_url=review_url,
                 input_path=args.input,
+                last_count_file=str(last_count_path),
             )
             append_notification_debug_log(
                 notification_debug_log_path(project_dir),

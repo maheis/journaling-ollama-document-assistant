@@ -2880,6 +2880,16 @@ class Handler(BaseHTTPRequestHandler):
             "summary_finished_at": finished_at_raw,
             "notification": notification_debug_snapshot(config),
         }
+        # read last known review count (optional persistence)
+        last_count_path = project_dir / "logs" / "last_review_count.json"
+        last_known_review_count = 0
+        try:
+            if last_count_path.exists() and last_count_path.is_file():
+                payload = json.loads(last_count_path.read_text(encoding="utf-8") or "{}")
+                last_known_review_count = int(payload.get("last_review_count", 0) or 0)
+        except Exception:
+            last_known_review_count = 0
+        debug_payload["last_known_review_count"] = last_known_review_count
         if finished_at_raw:
             try:
                 summary_finished_at = datetime.fromisoformat(finished_at_raw).timestamp()
@@ -2908,6 +2918,7 @@ class Handler(BaseHTTPRequestHandler):
             scan_source=scan_source,
             review_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
             input_path=str(get_section(config, "service").get("input", "") or ""),
+            last_count_file=str(last_count_path),
         )
         append_notification_debug_log(
             self._notification_debug_log_path(project_dir),

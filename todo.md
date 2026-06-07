@@ -50,5 +50,7 @@
 [x] email-benachrichtigung bei neuen Dokumenten zur prüfung
 [x] joda = journaling ollama document assistant
 [x] laufzeit ausgeben
-[ ] webui für normale ki anfragen
-[ ] löschen von dateien über die weboberfläche
+[x] webui für normale ki anfragen
+[x] löschen von dateien über die weboberfläche
+[x] mail wenn neue dokumente ins review kommen
+[ ] mobile ansicht
