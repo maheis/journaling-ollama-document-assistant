@@ -924,6 +924,10 @@ HTML_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda</title>
+    <!-- Favicon: embedded SVG data URI and file fallback (assets/favicon.svg) -->
+    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='100%' height='100%' fill='%231c2233'/><circle cx='32' cy='32' r='28' fill='%2323c4a8'/><text x='32' y='38' font-family='IBM Plex Sans, Arial, sans-serif' font-size='28' text-anchor='middle' fill='%23071a18' font-weight='700'>J</text></svg>" />
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <meta name="theme-color" content="#1c2233" />
     <style>
         :root {
             --bg: #0f1117;
