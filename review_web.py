@@ -2975,12 +2975,25 @@ class Handler(BaseHTTPRequestHandler):
         stats = summary.get("stats", {}) if isinstance(summary.get("stats", {}), dict) else {}
         new_review_count = int(stats.get("processed", 0) or 0)
         error_count = int(stats.get("errors", 0) or 0)
+        # Determine public review URL for notifications
+        service = get_section(config, "service")
+        review_web_cfg = get_section(config, "review_web")
+        review_url = str(service.get("external_url", "") or "").strip()
+        if not review_url:
+            review_url = str(review_web_cfg.get("external_url", "") or "").strip()
+        if not review_url:
+            notifications = config.get("notifications", {}) if isinstance(config.get("notifications", {}), dict) else {}
+            email_cfg = notifications.get("email", {}) if isinstance(notifications.get("email", {}), dict) else {}
+            review_url = str(email_cfg.get("public_url", "") or "").strip()
+        if not review_url:
+            review_url = f"http://{self.server.server_address[0]}:{self.server.server_address[1]}"
+
         result = send_review_notification(
             config,
             new_review_count=new_review_count,
             error_count=error_count,
             scan_source=scan_source,
-            review_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
+            review_url=review_url,
             input_path=str(get_section(config, "service").get("input", "") or ""),
             last_count_file=str(last_count_path),
         )

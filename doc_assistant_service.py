@@ -268,7 +268,16 @@ def run_organize_once(args: argparse.Namespace, project_dir: Path) -> int:
             "notification": notification_debug_snapshot(config),
         }
         if summary_finished_at + 1 >= started_at and (new_review_count > 0 or error_count > 0):
-            review_url = f"http://{args.host}:{args.port}"
+            # Determine a public review URL to include in notifications. Prefer explicit config keys
+            service_section = get_section(config, "service")
+            review_url = str(service_section.get("external_url", "") or "").strip()
+            if not review_url:
+                # fallback to notifications.email.public_url if provided
+                notifications = config.get("notifications", {}) if isinstance(config.get("notifications", {}), dict) else {}
+                email_cfg = notifications.get("email", {}) if isinstance(notifications.get("email", {}), dict) else {}
+                review_url = str(email_cfg.get("public_url", "") or "").strip()
+            if not review_url:
+                review_url = f"http://{args.host}:{args.port}"
             result = send_review_notification(
                 config,
                 new_review_count=new_review_count,
