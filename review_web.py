@@ -950,8 +950,7 @@ HTML_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda</title>
-    <!-- Favicon: embedded SVG data URI and file fallback (assets/favicon.svg) -->
-    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='100%' height='100%' fill='%231c2233'/><circle cx='32' cy='32' r='28' fill='%2323c4a8'/><text x='32' y='38' font-family='IBM Plex Sans, Arial, sans-serif' font-size='28' text-anchor='middle' fill='%23071a18' font-weight='700'>J</text></svg>" />
+    <!-- Favicon: external file (assets/favicon.svg) -->
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <meta name="theme-color" content="#1c2233" />
     <style>
@@ -1583,8 +1582,7 @@ CONFIG_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda - Konfiguration</title>
-    <!-- Favicon: embedded SVG data URI and file fallback (assets/favicon.svg) -->
-    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='100%' height='100%' fill='%231c2233'/><circle cx='32' cy='32' r='28' fill='%2323c4a8'/><text x='32' y='38' font-family='IBM Plex Sans, Arial, sans-serif' font-size='28' text-anchor='middle' fill='%23071a18' font-weight='700'>J</text></svg>" />
+    <!-- Favicon: external file (assets/favicon.svg) -->
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <meta name="theme-color" content="#1c2233" />
     <style>
@@ -2163,8 +2161,7 @@ PROMPT_PAGE = """<!doctype html>
         <meta charset=\"utf-8\" />
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
         <title>joda - Prompt</title>
-        <!-- Favicon: embedded SVG data URI and file fallback (assets/favicon.svg) -->
-        <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='100%' height='100%' fill='%231c2233'/><circle cx='32' cy='32' r='28' fill='%2323c4a8'/><text x='32' y='38' font-family='IBM Plex Sans, Arial, sans-serif' font-size='28' text-anchor='middle' fill='%23071a18' font-weight='700'>J</text></svg>" />
+        <!-- Favicon: external file (assets/favicon.svg) -->
         <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
         <meta name="theme-color" content="#1c2233" />
         <style>
@@ -2244,8 +2241,7 @@ LOGS_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda - Logfiles</title>
-    <!-- Favicon: embedded SVG data URI and file fallback (assets/favicon.svg) -->
-    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='100%' height='100%' fill='%231c2233'/><circle cx='32' cy='32' r='28' fill='%2323c4a8'/><text x='32' y='38' font-family='IBM Plex Sans, Arial, sans-serif' font-size='28' text-anchor='middle' fill='%23071a18' font-weight='700'>J</text></svg>" />
+    <!-- Favicon: external file (assets/favicon.svg) -->
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <meta name="theme-color" content="#1c2233" />
     <style>
@@ -2463,8 +2459,7 @@ LOGIN_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda - Login</title>
-    <!-- Favicon: embedded SVG data URI and file fallback (assets/favicon.svg) -->
-    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='100%' height='100%' fill='%231c2233'/><circle cx='32' cy='32' r='28' fill='%2323c4a8'/><text x='32' y='38' font-family='IBM Plex Sans, Arial, sans-serif' font-size='28' text-anchor='middle' fill='%23071a18' font-weight='700'>J</text></svg>" />
+    <!-- Favicon: external file (assets/favicon.svg) -->
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <meta name="theme-color" content="#1c2233" />
     <style>
@@ -3553,6 +3548,43 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", content_type or "application/octet-stream")
             self.send_header("Content-Length", str(file_size))
             self.send_header("Content-Disposition", f"inline; filename={path.name}")
+            self.end_headers()
+            try:
+                with file_handle:
+                    while True:
+                        chunk = file_handle.read(FILE_STREAM_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                return
+            return
+
+        # Serve asset files from the local assets/ directory (e.g. /assets/favicon.svg)
+        if parsed.path.startswith("/assets/"):
+            if not self._require_auth(is_api=False):
+                return
+            assets_root = Path(__file__).resolve().parent / "assets"
+            rel = parsed.path[len("/assets/") :]
+            file_path = (assets_root / rel).resolve()
+            try:
+                # Prevent path traversal: ensure file_path is inside assets_root
+                if not str(file_path).startswith(str(assets_root.resolve())):
+                    raise Exception("invalid path")
+                if not file_path.exists() or not file_path.is_file():
+                    self._text_response("Not found", status=404, content_type="text/plain; charset=utf-8")
+                    return
+                file_size = file_path.stat().st_size
+                file_handle = file_path.open("rb")
+            except Exception:
+                self._text_response("Read error", status=500, content_type="text/plain; charset=utf-8")
+                return
+
+            content_type, _ = mimetypes.guess_type(str(file_path))
+            self.send_response(HTTPStatus.OK)
+            self._send_security_headers()
+            self.send_header("Content-Type", content_type or "application/octet-stream")
+            self.send_header("Content-Length", str(file_size))
             self.end_headers()
             try:
                 with file_handle:
