@@ -712,23 +712,32 @@ class ReviewStore:
             self._sync_from_log()
             rows: list[dict[str, Any]] = []
             for entry in self.state["entries"].values():
-                source = Path(entry.get("source", ""))
+                # Determine display source: if deployed and deployed_target present, prefer that path
+                orig_source = Path(entry.get("source", ""))
                 status_value = str(entry.get("status", "pending") or "pending")
-                target_preview = str(entry.get("deployed_target", "")).strip()
-                if status_value != "deployed" or not target_preview:
-                    target_preview = str(self._build_target(entry))
+                deployed_target = str(entry.get("deployed_target", "")).strip()
+
+                if status_value == "deployed" and deployed_target:
+                    display_source_path = deployed_target
+                else:
+                    display_source_path = str(orig_source)
+
+                source = Path(display_source_path)
+
+                target_preview = deployed_target if (status_value == "deployed" and deployed_target) else str(self._build_target(entry))
                 target_preview = self._format_target_preview(target_preview)
                 row = {
                     "id": entry["id"],
                     "status": status_value,
                     "source": str(source),
                     "source_preview": self._format_source_preview(str(source)),
-                    "source_name": source.name,
+                    "source_name": source.name if source.name else Path(entry.get("source", "")).name,
                     "source_exists": source.exists(),
                     "confidence": float(entry.get("confidence", 0.0) or 0.0),
                     "review": bool(entry.get("review", False)),
                     "target_preview": target_preview,
                     "deployed_at": entry.get("deployed_at", ""),
+                    "deployed_target": entry.get("deployed_target", ""),
                     "default": entry.get("default", {}),
                     "edited": entry.get("edited", {}),
                 }
@@ -805,6 +814,8 @@ class ReviewStore:
                         p = Path(incoming_deployed_target)
                         if p.exists():
                             entry["status"] = "deployed"
+                            # update source to point to deployed file so future checks use the correct path
+                            entry["source"] = str(p)
                             if not entry.get("deployed_at"):
                                 entry["deployed_at"] = datetime.now().isoformat(timespec="seconds")
                         else:
@@ -890,6 +901,8 @@ class ReviewStore:
                     entry["status"] = "deployed"
                     entry["deployed_at"] = datetime.now().isoformat(timespec="seconds")
                     entry["deployed_target"] = str(target)
+                    # update source to point to actual deployed file so UI links/use the deployed path
+                    entry["source"] = str(target)
                     applied += 1
                 except Exception as exc:
                     entry["status"] = "saved" if self._edited_differs_from_default(entry) else "pending"
