@@ -950,7 +950,6 @@ HTML_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda</title>
-    <!-- Favicon: external file (assets/favicon.svg) -->
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <meta name="theme-color" content="#1c2233" />
     <style>
@@ -1582,7 +1581,6 @@ CONFIG_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda - Konfiguration</title>
-    <!-- Favicon: external file (assets/favicon.svg) -->
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <meta name="theme-color" content="#1c2233" />
     <style>
@@ -2161,7 +2159,6 @@ PROMPT_PAGE = """<!doctype html>
         <meta charset=\"utf-8\" />
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
         <title>joda - Prompt</title>
-        <!-- Favicon: external file (assets/favicon.svg) -->
         <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
         <meta name="theme-color" content="#1c2233" />
         <style>
@@ -2241,7 +2238,6 @@ LOGS_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda - Logfiles</title>
-    <!-- Favicon: external file (assets/favicon.svg) -->
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <meta name="theme-color" content="#1c2233" />
     <style>
@@ -2459,7 +2455,6 @@ LOGIN_PAGE = """<!doctype html>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
     <title>joda - Login</title>
-    <!-- Favicon: external file (assets/favicon.svg) -->
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <meta name="theme-color" content="#1c2233" />
     <style>
