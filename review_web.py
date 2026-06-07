@@ -1055,6 +1055,17 @@ HTML_PAGE = """<!doctype html>
             border-radius: 8px;
             margin-bottom: 4px;
         }
+        @media (max-width: 1440px) {
+            table { min-width: 0; }
+            thead { display: none; }
+            tbody { display: block; }
+            tbody tr { display: block; margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--card2); }
+            td { display: block; width: 100%; padding: 6px 0; border-bottom: none; }
+            td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+            td.col-file a.filelink { font-weight: 600; color: #67c7ff; }
+            .row-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+            input, select { width: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -1180,15 +1191,15 @@ function rowMarkup(row) {
     const deployDisabled = row.status === 'deployed' ? 'disabled' : '';
 
     return `<tr data-id="${esc(row.id)}">
-        <td class="col-file">
+        <td class="col-file" data-label="Datei">
             <a class="filelink" target="_blank" href="/file?id=${encodeURIComponent(row.id)}">${esc(row.source_name)}</a>
             <div class="mini">${esc(row.source_preview || row.source)}</div>
             <div>${badge}</div>
             ${missing}
         </td>
-        <td><span class="pill ${statusClass}">${esc(statusLabel)}</span></td>
-        <td>${Number(row.confidence || 0).toFixed(2)}</td>
-        <td>
+        <td data-label="Status"><span class="pill ${statusClass}">${esc(statusLabel)}</span></td>
+        <td data-label="Vertr.">${Number(row.confidence || 0).toFixed(2)}</td>
+        <td data-label="Felder">
             <div class="edit-fields-vertical">
                 <div class="edit-field">
                     <label>Sender
@@ -1216,12 +1227,12 @@ function rowMarkup(row) {
                 </div>
             </div>
         </td>
-        <td>
+        <td data-label="Datum">
             <input name="date" value="${esc(row.edited.date || '')}" placeholder="YYYY-MM-DD" />
             <div class="mini">LLM: ${esc(row.default.date || '')}</div>
         </td>
-        <td class="mini">${esc(row.target_preview || '')}</td>
-        <td>
+        <td class="mini" data-label="Ziel">${esc(row.target_preview || '')}</td>
+        <td data-label="Aktionen">
             <div class="row-actions">
                 <button onclick="saveRow('${esc(row.id)}')" ${deployDisabled}>Speichern</button>
                 <button class="primary" onclick="deployRow('${esc(row.id)}')" ${deployDisabled}>Ausführen</button>
